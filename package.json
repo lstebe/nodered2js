@@ -1,0 +1,11 @@
+{
+  "name": "nodered2js",
+  "version": "1.0.0",
+  "description": "Converts Node Red Flows hopefully soon to executeable node.js code",
+  "main": "nodered2js.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Lindsay Stebe",
+  "license": "MIT"
+}
