@@ -16,4 +16,4 @@
 
  -The resulting filename then is 'result(not executable).js'
 
- -An existing ResultFile become overwritten!
+ -An existing ResultFile becomes overwritten!
