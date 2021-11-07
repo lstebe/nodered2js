@@ -2,7 +2,7 @@
  Extracts Function Nodes from a Node Red Flow and writes them into a JS not necessarily executable, but good for versioning and editing
 
  When executing via terminal do:
- >> node nodered2js -r /path/to/flowfile/flows.json -t /path/to/result.js(/.txt/.whatever)
+ >> node nodered2js.js -r /path/to/flowfile/flows.json -t /path/to/result.js(/.txt/.whatever)
 
  Where:
  -r , --read -> flowfile to read
