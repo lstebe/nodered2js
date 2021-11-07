@@ -14,6 +14,6 @@
  -The name of the flowfile must include 'flow' as a substring.
     e.g. my_superflow_for_NodeRed.json
 
- -The resulting filename then is 'result(not executable).js'
+ -The resulting filename then is 'result(not executable).js' which will be placed in the nodered2js-Folder
 
- -An existing ResultFile becomes overwritten!
+ -An existing Result File becomes overwritten!
