@@ -22,7 +22,7 @@
  
 ![resultfileexample](https://user-images.githubusercontent.com/84880723/140642529-032c2a1e-ab2c-42e5-bfb2-2718a6af3398.png)
 
-- The nodeID of the function-node in the flow will be written on top of the function.
+-The nodeID of the function-node in the flow will be written on top of the function.
 
 -By copy and paste the id you can then find it in you NR-editor.
 
