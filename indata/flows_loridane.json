@@ -236,11 +236,21 @@
         "name": "LORIDANE - MQTT In",
         "info": "",
         "category": "Loridane",
-        "in": [],
+        "in": [
+            {
+                "x": 20,
+                "y": 120,
+                "wires": [
+                    {
+                        "id": "088ce0e8085dd6d5"
+                    }
+                ]
+            }
+        ],
         "out": [
             {
-                "x": 820,
-                "y": 80,
+                "x": 520,
+                "y": 120,
                 "wires": [
                     {
                         "id": "1c0ac556.46e25b",
@@ -249,7 +259,7 @@
                 ]
             },
             {
-                "x": 1000,
+                "x": 920,
                 "y": 120,
                 "wires": [
                     {
@@ -285,8 +295,8 @@
         ],
         "icon": "node-red/bridge.svg",
         "status": {
-            "x": 480,
-            "y": 280,
+            "x": 640,
+            "y": 40,
             "wires": [
                 {
                     "id": "f7a51ace.7907f8",
@@ -1114,15 +1124,15 @@
         "id": "47d49580.9cf8dc",
         "type": "function",
         "z": "c23de0ef.dae5f",
-        "name": "Sync",
+        "name": "send Sync",
         "func": "//*\ntimer = context.get(\"timer\");\nclearTimeout(timer);\ncontext.set(\"timer\",timer);\n//*/\n\nfunction countup(secs){\n    timer = context.get(\"timer\");\n    clearTimeout(timer);\n    node.status({text:\"Last Sync: \"+secs+\"s ago\"});\n    secs++;\n    timer = setTimeout(countup,1000,secs);\n    context.set(\"timer\",timer);\n}\n\ngetUIDGW = global.get(\"LORIDANE.funcs.getUIDGW\");\ngws = getUIDGW();\n\nfor (var g in gws){\n    msg = {payload:\"cn:sync\",topic:\"lora/\"+gws[g]};\n    node.send(msg);\n}\nnode.status({text: \"Sync\"});\n//*\ntimer = setTimeout(countup,1000,0);\ncontext.set(\"timer\",timer);\n//*/\n//setTimeout(()=>node.status({}),5000);\nreturn;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 270,
-        "y": 140,
+        "x": 550,
+        "y": 80,
         "wires": [
             [
                 "44fa5e0e.309d9"
@@ -1135,8 +1145,8 @@
         "z": "c23de0ef.dae5f",
         "name": "",
         "env": [],
-        "x": 450,
-        "y": 140,
+        "x": 740,
+        "y": 80,
         "wires": []
     },
     {
@@ -1149,18 +1159,17 @@
                 "p": "payload"
             }
         ],
-        "repeat": "233",
+        "repeat": "",
         "crontab": "",
         "once": true,
-        "onceDelay": "7",
+        "onceDelay": "30",
         "topic": "",
-        "payload": "",
         "payloadType": "date",
         "x": 200,
         "y": 80,
         "wires": [
             [
-                "47d49580.9cf8dc"
+                "b62026e6367c3ae2"
             ]
         ]
     },
@@ -1510,7 +1519,7 @@
         "type": "function",
         "z": "922120e5.5b086",
         "name": "Validate Data",
-        "func": "data = msg.payload.data;\nlet topic = true;\ninrange = global.get(\"LORIDANE.funcs.inRangeOf\");\nconst timeOnAir = global.get(\"LORIDANE.values.lastPayloadLens.toa\");\n\nif(data.freq === 0){\n    data.freq = global.get(\"LORIDANE.devices.gw[0].freq\") / (1e6);\n}\n\nfunction allowed(freq){\n    allowedfreq = global.get(\"LORIDANE.values.allowedFreq\");\n    for (i = 0;i < allowedfreq.length;i++){\n        if (inrange(data.freq,allowedfreq[i].min,allowedfreq[i].max)){\n            return {allowed:true, factor:allowedfreq[i].factor};\n        }\n    }\n    return {allowed:false,factor:Infinity};\n}\n\nvalidated = false;\nkeys = Object.keys(data);\ncause = \"\";\n\nfor(var key of keys){\n    validated = false;\n    if(data[key]){\n        switch(key){\n            case \"freq\":\n                validated = allowed(data.freq).allowed;\n                cause = \"Forbidden Frequency \"+data.freq+\"MHz\";\n                break;\n            case \"tx\":\n                validated = inrange(data.tx,4,20);\n                cause = \"Sending Power\";\n                break;\n            case \"sf\":\n                validated = inrange(data.sf,7,12);\n                cause = \"Spreading Factor\";\n                break;\n            case \"friendly\":\n                validated = true;\n                break;\n            case \"iv\":\n                minInterval = timeOnAir * allowed(data.freq).factor;\n                node.warn(minInterval)\n                validated = inrange(data.iv,minInterval,Infinity);\n                cause = `Send Interval is at least ${minInterval} ms !`;\n                break;\n        }\n        if(!validated) break;\n    }else{\n        validated = true;\n        continue;\n    }\n}\n\nmsg.topic = validated;\nmsg.cause = cause;\n\nreturn msg;",
+        "func": "data = msg.payload.data;\nlet topic = true;\ninrange = global.get(\"LORIDANE.funcs.inRangeOf\");\nconst timeOnAir = global.get(\"LORIDANE.values.lastPayloadLens.toa\");\nlet minInterval = global.get(\"LORIDANE.values.lastPayloadLens.minInterval\") || 5000;\nconst allowed = global.get(\"LORIDANE.funcs.allowed\");\nif(data.freq === 0){\n    data.freq = global.get(\"LORIDANE.devices.gw[0].freq\") / (1e6);\n}\n\nvalidated = false;\nkeys = Object.keys(data);\ncause = \"\";\n\nfor(var key of keys){\n    validated = false;\n    if(data[key]){\n        switch(key){\n            case \"freq\":\n                fromAllowed = allowed(data.freq);\n                validated = fromAllowed.allowed;\n                cause = \"Forbidden Frequency \"+data.freq+\"MHz, try \"+fromAllowed.instead+\" MHz instead\";\n                break;\n            case \"tx\":\n                validated = inrange(data.tx,4,20);\n                cause = \"Sending Power\";\n                break;\n            case \"sf\":\n                validated = inrange(data.sf,7,12);\n                cause = \"Spreading Factor\";\n                break;\n            case \"friendly\":\n                validated = true;\n                break;\n            case \"iv\":\n                minInterval = (isNaN(minInterval)) ? 4000 : minInterval;\n                validated = inrange(data.iv,minInterval,Infinity);\n                cause = `Send Interval is at least ${minInterval} ms !`;\n                break;\n        }\n        if(!validated) break;\n    }else{\n        validated = true;\n        continue;\n    }\n}\n\nmsg.topic = validated;\nmsg.cause = cause;\n\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -1742,7 +1751,7 @@
         "type": "function",
         "z": "922120e5.5b086",
         "name": "Validate Data",
-        "func": "data = msg.payload.data;\nlet topic = true;\ninrange = global.get(\"LORIDANE.funcs.inRangeOf\");\n\n\nfunction allowed(freq){\n    allowedfreq = global.get(\"LORIDANE.values.allowedFreq\");\n    for (i = 0;i < allowedfreq.length -3;){\n        if (inrange(data.freq,allowedfreq[i],allowedfreq[i+1]) && (data.freq*10) % 2 === 0){\n            return true;\n        }\n        i += 3;\n    }\n    return false;\n}\n\nvalidated = false;\nkeys = Object.keys(data);\ncause = \"\";\n\nfor(var key of keys){\n    validated = false;\n    if(data[key]){\n        switch(key){\n            case \"freq\":\n                validated = allowed(data.freq);\n                cause = \"Frequency\";\n                break;\n            case \"tx\":\n                validated = inrange(data.tx,4,20);\n                cause = \"Sending Power\";\n                break;\n            case \"sf\":\n                validated = inrange(data.sf,7,12);\n                cause = \"Spreading Factor\";\n                break;\n            case \"friendly\":\n                validated = true;\n                break;\n        }\n        if(!validated) break;\n    }else{\n        validated = true;\n        continue;\n    }\n}\n\nmsg.topic = validated;\nmsg.cause = cause;\n\nreturn msg;",
+        "func": "data = msg.payload.data;\nlet topic = true;\ninrange = global.get(\"LORIDANE.funcs.inRangeOf\");\n\n\nfunction allowed(freq){\n    allowedfreq = global.get(\"LORIDANE.values.allowedFreq\");\n    for (i = 0;i < allowedfreq.length -3;){\n        if (inrange(data.freq,allowedfreq[i],allowedfreq[i+1]) && (data.freq*10) % 2 === 0){\n            return true;\n        }\n        i += 3;\n    }\n    return false;\n}\n\nvalidated = false;\nkeys = Object.keys(data);\ncause = \"\";\n\nfor(var key of keys){\n    validated = false;\n    if(data[key]){\n        switch(key){\n            case \"freq\":\n                fromAllowed = allowed(data.freq);\n                validated = fromAllowed.allowed;\n                cause = \"Forbidden Frequency \"+data.freq+\"MHz, try \"+fromAllowed.instead+\" MHz instead\";\n                break;\n            case \"tx\":\n                validated = inrange(data.tx,4,20);\n                cause = \"Sending Power\";\n                break;\n            case \"sf\":\n                validated = inrange(data.sf,7,12);\n                cause = \"Spreading Factor\";\n                break;\n            case \"friendly\":\n                validated = true;\n                break;\n        }\n        if(!validated) break;\n    }else{\n        validated = true;\n        continue;\n    }\n}\n\nmsg.topic = validated;\nmsg.cause = cause;\n\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -1918,7 +1927,7 @@
         "type": "function",
         "z": "922120e5.5b086",
         "name": "Validate Data",
-        "func": "data = msg.payload.data;\nlet topic = true;\ninrange = global.get(\"LORIDANE.funcs.inRangeOf\");\nconst timeOnAir = global.get(\"LORIDANE.values.lastPayloadLens.toa\");\n//node.warn(msg) //debug\nfunction allowed(freq){\n    allowedfreq = global.get(\"LORIDANE.values.allowedFreq\");\n    for (i = 0;i < allowedfreq.length;i++){\n        if (inrange(data.freq,allowedfreq[i].min,allowedfreq[i].max)){\n            return {allowed:true, factor:allowedfreq[i].factor};\n        }\n    }\n    return false;\n}\n\nvalidated = false;\nkeys = Object.keys(data);\ncause = \"\";\n\nfor(var key of keys){\n    validated = false;\n    if(data[key]){\n        switch(key){\n            case \"freq\":\n                validated = allowed(data.freq).allowed;\n                cause = \"Forbidden Frequency \"+data.freq+\"MHz\";\n                break;\n            case \"tx\":\n                validated = inrange(data.tx,4,20);\n                cause = \"Sending Power\";\n                break;\n            case \"sf\":\n                validated = inrange(data.sf,7,12);\n                cause = \"Spreading Factor\";\n                break;\n            case \"friendly\":\n                validated = true;\n                break;\n            case \"iv\":\n                minInterval = timeOnAir * allowed(data.freq).factor;\n                validated = inrange(data.iv,minInterval,Infinity);\n                cause = `Send Interval which is at least ${minInterval} ms!`;\n                break;\n        }\n        if(!validated) break;\n    }else{\n        validated = true;\n        continue;\n    }\n}\n\nmsg.topic = validated;\nmsg.cause = cause;\n\nreturn msg;",
+        "func": "data = msg.payload.data;\nlet topic = true;\nlet minInterval = global.get(\"LORIDANE.values.lastPayloadLens.minInterval\") || 5000;\n\ninrange = global.get(\"LORIDANE.funcs.inRangeOf\");\nconst timeOnAir = global.get(\"LORIDANE.values.lastPayloadLens.toa\");\n//node.warn(msg) //debug\nconst allowed = global.get(\"LORIDANE.funcs.allowed\");\n\nvalidated = false;\nkeys = Object.keys(data);\ncause = \"\";\n\nfor(var key of keys){\n    validated = false;\n    if(data[key]){\n        switch(key){\n            case \"freq\":\n                fromAllowed = allowed(data.freq);\n                validated = fromAllowed.allowed;\n                cause = \"Forbidden Frequency \"+data.freq+\"MHz, try \"+fromAllowed.instead+\" MHz instead\";\n                break;\n            case \"tx\":\n                validated = inrange(data.tx,4,20);\n                cause = \"Sending Power\";\n                break;\n            case \"sf\":\n                validated = inrange(data.sf,7,12);\n                cause = \"Spreading Factor\";\n                break;\n            case \"friendly\":\n                validated = true;\n                break;\n            case \"iv\":\n                minInterval = (isNaN(minInterval)) ? 4000 : minInterval;\n                validated = inrange(data.iv,minInterval,Infinity);\n                cause = `Send Interval which is at least ${minInterval} ms!`;\n                break;\n        }\n        if(!validated) break;\n    }else{\n        validated = true;\n        continue;\n    }\n}\n\nmsg.topic = validated;\nmsg.cause = cause;\n\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -2486,14 +2495,14 @@
         "id": "2581615a.b8042e",
         "type": "function",
         "z": "922120e5.5b086",
-        "name": "",
+        "name": "send with delay",
         "func": "setTimeout(()=>node.send({topic:\"\",payload:\"\"}),15000);\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1500,
+        "x": 1520,
         "y": 760,
         "wires": [
             [
@@ -2669,7 +2678,7 @@
         "type": "function",
         "z": "922120e5.5b086",
         "name": "delete devices",
-        "func": "if(msg.payload != \"OK\")return;\n\n//else\ndeleteDevice = global.get(\"LORIDANE.funcs.deleteDevice\");\nwriteConfig = global.get(\"LORIDANE.funcs.writeConfig\");\n\ndevices = msg.devices;\n\nfor(var device of devices){\n    deleteDevice(device);\n}\n\nwriteConfig();\n\nreturn;",
+        "func": "if(msg.payload != \"OK\")return;\n\n//else\nconst deleteDevice = global.get(\"LORIDANE.funcs.deleteDevice\");\nconst writeConfig = global.get(\"LORIDANE.funcs.writeConfig\");\nignorelist = global.get(\"LORIDANE.ignorelist\")||[];\n\ndevices = msg.devices;\n\nfor(var device of devices){\n    deleteDevice(device);\n    if(!ignorelist.includes(device)){\n        ignorelist.push(device);\n    }\n}\nglobal.set(\"LORIDANE.ignorelist\",ignorelist);\nwriteConfig();\n\nreturn;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -2810,93 +2819,6 @@
         "wires": [
             []
         ]
-    },
-    {
-        "id": "ff91fe98.c403c",
-        "type": "ui_button",
-        "z": "922120e5.5b086",
-        "d": true,
-        "name": "",
-        "group": "14943851.2ea1c8",
-        "order": 6,
-        "width": 0,
-        "height": 0,
-        "passthru": false,
-        "label": "Delete all Tokens",
-        "tooltip": "",
-        "color": "",
-        "bgcolor": "",
-        "icon": "",
-        "payload": "true",
-        "payloadType": "bool",
-        "topic": "topic",
-        "topicType": "msg",
-        "x": 210,
-        "y": 1940,
-        "wires": [
-            [
-                "f624fc7e.eebc2"
-            ]
-        ]
-    },
-    {
-        "id": "be40033d.bc523",
-        "type": "ui_toast",
-        "z": "922120e5.5b086",
-        "position": "dialog",
-        "displayTime": "3",
-        "highlight": "",
-        "sendall": true,
-        "outputs": 1,
-        "ok": "Yes, sure",
-        "cancel": "Cancel",
-        "raw": false,
-        "topic": "",
-        "name": "",
-        "x": 470,
-        "y": 1940,
-        "wires": [
-            [
-                "8e968c3c.eb59d"
-            ]
-        ]
-    },
-    {
-        "id": "8e968c3c.eb59d",
-        "type": "function",
-        "z": "922120e5.5b086",
-        "name": "delete tokens",
-        "func": "if(msg.payload == \"Yes, sure\"){\n    global.set(\"LORIDANE.API.token\",[]);\n}\nreturn;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 650,
-        "y": 1940,
-        "wires": [
-            []
-        ]
-    },
-    {
-        "id": "f624fc7e.eebc2",
-        "type": "function",
-        "z": "922120e5.5b086",
-        "name": "",
-        "func": "msg.payload = \"If yes, you will have to generate new ones and change them on every application\";\nmsg.topic = \"Delete all known Tokens?\";\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 355,
-        "y": 1940,
-        "wires": [
-            [
-                "be40033d.bc523"
-            ]
-        ],
-        "l": false
     },
     {
         "id": "eb3840c4.215ad",
@@ -3159,6 +3081,7 @@
         "ok": "OK",
         "cancel": "Cancel",
         "raw": false,
+        "className": "",
         "topic": "Are You Sure You want to move this device to the admission list?",
         "name": "",
         "x": 830,
@@ -3174,7 +3097,7 @@
         "type": "function",
         "z": "922120e5.5b086",
         "name": "move device from ignore to admit",
-        "func": "if(msg.payload != \"OK\" || msg.devices == [])return;\n\n//else\nconst writeConfig = global.get(\"LORIDANE.funcs.writeConfig\");\nlet admit = global.get(\"LORIDANE.admit\")\nlet devices = msg.devices;\n\nfor(var device of devices){\n    admit.push(device);\n}\nglobal.set(\"LORIDANE.admit\",admit);\n\nwriteConfig();\n\nreturn;",
+        "func": "if(msg.payload != \"OK\" || msg.devices == [])return;\n\n//else\nconst writeConfig = global.get(\"LORIDANE.funcs.writeConfig\");\nlet admit = global.get(\"LORIDANE.admit\")\nlet devices = msg.devices;\nignorelist = global.get(\"LORIDANE.ignorelist\") ||[];\n\nfor(var device of devices){\n    admit.push(device);\n    try{\n        ignorelist.slice(ignorelist.indexOf(device),1);\n    }catch(e){\n        //pass\n    }\n}\nglobal.get(\"LORIDANE.ignorelist\",ignorelist);\nglobal.set(\"LORIDANE.admit\",admit);\n\nwriteConfig();\n\nreturn;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -3328,7 +3251,7 @@
         "id": "a0be56ff.ac9d48",
         "type": "function",
         "z": "1395c386.064e8c",
-        "name": "",
+        "name": "set config path by user",
         "func": "const USER = msg.user;\nmsg.payload = `/home/${USER}/LORIDANE/config/`;\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
@@ -3349,7 +3272,7 @@
         "type": "function",
         "z": "1395c386.064e8c",
         "name": "Watch Config Folder",
-        "func": "//Import filesystem Lib\nconst fs = global.get(\"fs\");\nconst homepath = msg.payload;\nlet LORIDANE = {};\nlet memCache = {};\nLORIDANE.LinuxUsername = msg.user;\nnode.status({text:\"Reading Config File and load to Memcache\"})\n\n//Look for the config file\nlet path = homepath+\"loridaneConfig.json\";\nlet config = JSON.parse(fs.readFileSync(path)); //load config\ndelete config._comment;\nLORIDANE.settings = config;\n\n//change path to the path of the memcache file\npath = LORIDANE.settings.path.config+\"memCacheLoridane.json\";\n\nif(fs.existsSync(path)){\n    try{\n        memCache = JSON.parse(fs.readFileSync(path));\n    }catch (e){\n        node.warn(e);\n    }\n}\n//check if memCache exists and concat objects\nif(memCache) LORIDANE = {...LORIDANE,...memCache};\nLORIDANE.blockONstart = false;\n\n// save to memcache    \nglobal.set(\"LORIDANE\",LORIDANE);\nsetTimeout(()=>node.status({text:\"Initialized\"}),3000);\nreturn msg;",
+        "func": "//Import filesystem Lib\nconst fs = global.get(\"fs\");\nconst homepath = msg.payload;\nlet LORIDANE = {};\nlet memCache = {};\nlet config;\nLORIDANE.LinuxUsername = msg.user;\nnode.status({text:\"Reading Config File and load to Memcache\"})\n\n//Look for the config file\nlet path = homepath+\"loridaneConfig.json\";\n\ntry{\n    config = JSON.parse(fs.readFileSync(path)); //load config\n}catch(e){\n    node.warn(\"Error when loading config: \"+e);\n}\n\ndelete config._comment;\nLORIDANE.settings = config;\n\n//change path to the path of the memcache file\npath = LORIDANE.settings.path.config+\"memCacheLoridane.json\";\n\nif(fs.existsSync(path)){\n    try{\n        memCache = JSON.parse(fs.readFileSync(path));\n    }catch (e){\n        node.warn(e);\n    }\n}\n//check if memCache exists and concat objects\nif(memCache) LORIDANE = {...memCache,...LORIDANE};\nLORIDANE.blockONstart = false;\n\n// save to memcache    \nglobal.set(\"LORIDANE\",LORIDANE);\nsetTimeout(()=>node.status({text:\"Initialized\"}),3000);\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -3362,7 +3285,8 @@
                 "793fd.aa091c034",
                 "15da05df.3dbc1a",
                 "a361ed6d.d5815",
-                "d435f79f.f30138"
+                "d435f79f.f30138",
+                "c293f39ddc15f47b"
             ]
         ]
     },
@@ -3424,7 +3348,7 @@
         "type": "function",
         "z": "1395c386.064e8c",
         "name": "Functions",
-        "func": "funcs = {\n    checkUID: //**validate the device ID*/\n        function checkUID(UID){ //#bool\n            if(UID.length !== 14){\n                return false;\n            }\n            \n            if(!UID.startsWith(\"NO\")&& !UID.startsWith(\"GW\")){\n                return false;\n            }\n            for (index=2;index<UID.length;index++){\n                fit = new RegExp(/([A-F0-9])/).test(UID[index]);\n                if(!fit){\n                return fit;\n                }\n            }\n            return fit;\n        },\n    inRangeOf: //**check if num value is in a range*/\n        function inRangeOf(value,lower,upper){ //#bool\n            if (value >= lower && value <= upper){\n                return true;\n            }\n            return false;\n        },\n    getUIDGW: //**get all Gateway UIDs*/\n        function getUIDGW(){ //#array of strings\n            devices = global.get(\"LORIDANE.devices.gw\");\n            let arr = [];\n            for (var d in devices){\n                arr.push(devices[d].uid);\n            }\n            return arr;\n        },\n    getUIDND: //**get all Node UIDs*/\n        function getUIDND(){ //#array of strings\n            devices = global.get(\"LORIDANE.devices.nodes\");\n            let arr = [];\n            for (var d in devices){\n                arr.push(devices[d].uid);\n            }\n            return arr;\n        },\n    findGW://**find the index of a particular Gateway*/\n        function findGW(UID){ //#integer\n            const devices = global.get(\"LORIDANE.devices.gw\");\n            let i;\n            if(UID.startsWith(\"GW\")){\n                for(i in devices){\n                    if(devices[i].uid == UID)return i;\n                }\n            }\n            return -1;\n        },\n    findNode://**find the index of a particular Node*/\n        function findNode(UID){ //#integer\n            const devices = global.get(\"LORIDANE.devices.nodes\");\n            let i;\n            if(UID.startsWith(\"NO\")){\n                for(i in devices){\n                    if(devices[i].uid == UID)return i;\n                }\n            }\n            return -1;\n        },\n    deleteDevice: //**delete a particular device from memcache*/\n        function deleteDevice(UID){ //#none\n            var devices = global.get(\"LORIDANE.devices\");\n            var nodes = devices.nodes;\n            var gws = devices.gw;\n            let index;\n            index = funcs.findGW(UID);\n            if(index >= 0){\n                gws.splice(index,1);\n                global.set(\"LORIDANE.devices.gw\",gws);\n            }\n            index = funcs.findNode(UID);\n            if(index >= 0){\n                nodes.splice(index,1);\n                global.set(\"LORIDANE.devices.nodes\",nodes);\n            }\n            return;\n        },\n        writeConfig://*write the memcache to the memcache file**/\n            function writeConfig(delaytime){ // milliseconds #bool\n            let executed = true;\n                function writeDelayed(){\n                    const fs = global.get(\"fs\");\n                    var loridane =  global.get(\"LORIDANE\");\n                    const configpath = loridane.settings.path.config;\n                    delete loridane.homepath;\n                    const loridaneString = JSON.stringify(loridane,null,2);\n                    //fs.writeFileSync(configpath+\"memCacheLoridane.json\",loridaneString)\n                    fs.writeFile(configpath+\"memCacheLoridane.json\",loridaneString, err => {\n                        if (err) {\n                            console.error(err)\n                            return\n                        }\n                        //file written successfully\n                        })\n\n                        return true;\n                }\n                if(delaytime === 0 || delaytime === undefined){\n                    executed = writeDelayed();\n                }else{\n                    setTimeout(writeDelayed,delaytime);\n                }\n            return executed;\n        },\n        getConfig: //**get the whole configuration object by uid*/\n            function getConfig(uid){ //#object\n                let devices;\n                let device;\n                indexgw = funcs.findGW(uid);\n                indexno = funcs.findNode(uid);\n                \n                if(indexgw != -1){\n                    devices = global.get(\"LORIDANE.devices.gw\")\n                    device = devices[indexgw]\n                }else if(indexno != -1){\n                    devices = global.get(\"LORIDANE.devices.nodes\")\n                    device = devices[indexno]\n                }\n                return device;\n            },\n        decrypt:\n            function decrypt(payload){ /*String*/\n            //node.warn(payload)\n                // Only decrypt when payload is ciphered\n                const cr = global.get(\"crjs\");\n                const crypt = global.get(\"LORIDANE.settings.encryption\");\n                const key = cr.enc.Utf8.parse(crypt.key);\n                //value = cr.enc.Hex.parse(asciiToHex(payload));\n                let buf = Buffer.from(payload, 'ascii').toString();\n                node.warn(buf)\n                \n                let bytes  = cr.AES.decrypt(buf, key, {\n                    mode: cr.mode.ECB,\n                    padding: cr.pad.NoPadding\n                });\n                //node.warn(bytes)\n                //let plaintext = cr.enc.Ascii.stringify(bytes);\n                //let decoded = bytes.toString(cr.enc.Ascii);//hex2a(plaintext);\n                let decrypted = bytes.toString(cr.enc.Ascii);\n                //let words = cr.enc.Hex.parse(decrypted)\n                //let decoded = words.toString(cr.enc.Hex)\n                decoded = funcs.hex2a(decrypted)\n                \n                node.warn(decoded)\n                \n                return decoded;\n            },\n            hex2a:\n            function hex2a(hexx) {\n                    var hex = hexx.toString();//force conversion\n                    var str = '';\n                    for (var i = 0; i < hex.length; i += 2){\n                        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));\n                    }\n                    return str;\n                    },\n        timeOnAir:\n            function timeOnAir(bytes,sf){\n                let toa = Math.ceil((8 + ((bytes*8 - 4 * sf + 28) / (4 * sf) * 5)) * (2 ** sf) / (1e2));\n                return toa;\n            },\n            math:{//**matematical functions*/\n                getMean://**mean of an array*/\n                    function getMean(arr){ //#double\n                        mean = arr.reduce((a,b) => a+b)/arr.length;\n                        return mean;\n                    },\n                getSmooth://**running mean of an array by smooting interval*/\n                    function getSmooth(arr,interval){ //#array\n                        smoothened = [];\n                        getMean = funcs.math.getMean;\n                        const arrcpy = arr;\n                        intHalf = Math.floor(interval/2);\n                        for(i=0;i<intHalf;i++){\n                            smoothened.push(arr[i]);\n                        }\n                        for(i = intHalf; i < arr.length - intHalf; i++){\n                            smoothened.push(getMean(arrcpy.slice(i-intHalf,i+interval)));\n                        }\n                        for(i=arr.length - intHalf;i<arr.length;i++){\n                            smoothened.push(arr[i]);\n                        }\n                        return smoothened;\n                    },\n                getCDS://**array with the numeric first or second derivative*/\n                    function getCDS(arr,order){ // # array\n                        let CDS = [0];\n                        const len = arr.length;\n                        switch(order){\n                            case 1:\n                                for(i=1;i<len-1;i++){\n                                    CDS.push((arr[i+1]-arr[i-1])/2);\n                                }\n                                break;\n                            case 2:\n                                for(i=1;i<len-1;i++){\n                                    CDS.push((arr[i+1] -2*arr[i]+arr[i-1]));\n                                }\n                                break;\n                        }\n                        CDS.push(0);\n                        return CDS;\n                    }\n                }\n};\nglobal.set(\"LORIDANE.funcs\",funcs);\nreturn;",
+        "func": "funcs = {\n    checkUID: //**validate the device ID*/\n        function checkUID(UID){ //#bool\n            if(UID.length !== 14){\n                return false;\n            }\n            \n            if(!UID.startsWith(\"NO\") && !UID.startsWith(\"GW\")){\n                return false;\n            }\n            for (index=2;index<UID.length;index++){\n                fit = new RegExp(/([A-F0-9])/).test(UID[index]);\n                if(!fit){\n                return fit;\n                }\n            }\n            return fit;\n        },\n    inRangeOf: //**check if num value is in a range*/\n        function inRangeOf(value,lower,upper){ //#bool\n            if (value >= lower && value <= upper){\n                return true;\n            }\n            return false;\n        },\n    getUIDGW: //**get all Gateway UIDs*/\n        function getUIDGW(){ //#array of strings\n            devices = global.get(\"LORIDANE.devices.gw\");\n            let arr = [];\n            for (var d in devices){\n                arr.push(devices[d].uid);\n            }\n            return arr;\n        },\n    getUIDND: //**get all Node UIDs*/\n        function getUIDND(){ //#array of strings\n            devices = global.get(\"LORIDANE.devices.nodes\");\n            let arr = [];\n            for (var d in devices){\n                arr.push(devices[d].uid);\n            }\n            return arr;\n        },\n    findGW://**find the index of a particular Gateway*/\n        function findGW(UID){ //#integer\n            const devices = global.get(\"LORIDANE.devices.gw\");\n            let i;\n            if(UID.startsWith(\"GW\")){\n                for(i in devices){\n                    if(devices[i].uid == UID)return i;\n                }\n            }\n            return -1;\n        },\n    findNode://**find the index of a particular Node*/\n        function findNode(UID){ //#integer\n            const devices = global.get(\"LORIDANE.devices.nodes\");\n            let i;\n            if(UID.startsWith(\"NO\")){\n                for(i in devices){\n                    if(devices[i].uid == UID)return i;\n                }\n            }\n            return -1;\n        },\n    deleteDevice: //**delete a particular device from memcache*/\n        function deleteDevice(UID){ //#none\n            var devices = global.get(\"LORIDANE.devices\");\n            var nodes = devices.nodes;\n            var gws = devices.gw;\n            let index;\n            index = funcs.findGW(UID);\n            if(index >= 0){\n                gws.splice(index,1);\n                global.set(\"LORIDANE.devices.gw\",gws);\n            }\n            index = funcs.findNode(UID);\n            if(index >= 0){\n                nodes.splice(index,1);\n                global.set(\"LORIDANE.devices.nodes\",nodes);\n            }\n            return;\n        },\n        writeConfig://*write the memcache to the memcache file**/\n            function writeConfig(delaytime){ // milliseconds #bool\n            let executed = true;\n                function writeDelayed(){\n                    const fs = global.get(\"fs\");\n                    var loridane =  global.get(\"LORIDANE\");\n                    const configpath = loridane.settings.path.config;\n                    delete loridane.homepath;\n                    const loridaneString = JSON.stringify(loridane,null,2);\n                    //fs.writeFileSync(configpath+\"memCacheLoridane.json\",loridaneString)\n                    fs.writeFile(configpath+\"memCacheLoridane.json\",loridaneString, err => {\n                        if (err) {\n                            console.error(err)\n                            return\n                        }\n                        //file written successfully\n                        })\n\n                        return true;\n                }\n                if(delaytime === 0 || delaytime === undefined){\n                    executed = writeDelayed();\n                }else{\n                    setTimeout(writeDelayed,delaytime);\n                }\n            return executed;\n        },\n        getConfig: //**get the whole configuration object by uid*/\n            function getConfig(uid){ //#object\n                let devices;\n                let device;\n                indexgw = funcs.findGW(uid);\n                indexno = funcs.findNode(uid);\n                \n                if(indexgw != -1){\n                    devices = global.get(\"LORIDANE.devices.gw\")\n                    device = devices[indexgw]\n                }else if(indexno != -1){\n                    devices = global.get(\"LORIDANE.devices.nodes\")\n                    device = devices[indexno]\n                }\n                return device;\n            },\n        decrypt:\n            function decrypt(payload){ /*String*/\n            //node.warn(payload)\n                // Only decrypt when payload is ciphered\n                const cr = global.get(\"crjs\");\n                const crypt = global.get(\"LORIDANE.settings.encryption\");\n                const key = cr.enc.Utf8.parse(crypt.key);\n                value = cr.enc.Hex.parse(funcs.buf2hex(payload));\n                let buf = cr.enc.Base64.stringify(value);\n                \n                let bytes  = cr.AES.decrypt(buf, key, {\n                    mode: cr.mode.ECB,\n                    padding: cr.pad.ZeroPadding,\n                    salt:\"\"\n                });\n                \n                let decrypted = bytes.toString();\n                //node.warn(decrypted)\n                decrypted = funcs.hex2a(decrypted);\n                return decrypted;\n            },\n            hex2a:\n            function hex2a(hexx) {\n                    var hex = hexx.toString(); // if not already is str\n                    var str = '';\n                    for (var i = 0; i < hex.length; i += 2){\n                        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));\n                    }\n                    return str;\n                    },\n            buf2hex:\n            function buf2hex(buffer) { // buffer is an ArrayBuffer\n                    return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');\n            },\n        timeOnAir:\n            function timeOnAir(bytes,sf){\n                let toa = Math.ceil((8 + ((bytes*8 - 4 * sf + 28) / (4 * sf) * 5)) * (2 ** sf) / (1e2));\n                return toa;\n            },\n        allowed:\n            function allowed(freq){\n                const allowedfreq = global.get(\"LORIDANE.values.allowedFreq\");\n                const inrange = funcs.inRangeOf;\n                for (i = 0, len = allowedfreq.length; i < len;i++){\n                    if (inrange(freq,allowedfreq[i].min,allowedfreq[i].max)){\n                        return {allowed:true, factor:allowedfreq[i].factor};\n                    }\n                    if (inrange(freq, allowedfreq[i].max, allowedfreq[i+1].min)){\n                    return {allowed:false, instead: allowedfreq[i+1].min, factor:Infinity};\n                    }\n                }\n                return {allowed:false, instead:867.0, factor: Infinity};\n            },\n        minInterval:\n            function minInterval(){\n                const toa = global.get(\"LORIDANE.values.lastPayloadLens.toa\")||51;\n                const allowed = funcs.allowed;                \n                const freq = global.get(\"LORIDANE.devices.gw[0].freq\")||867e6;\n                let IV = toa * allowed(freq / 1e6).factor||4000;\n                return IV;\n            },\n            math:{//**matematical functions*/\n                getMean://**mean of an array*/\n                    function getMean(arr){ //#double\n                        mean = arr.reduce((a,b) => a+b)/arr.length;\n                        return mean;\n                    },\n                getSmooth://**running mean of an array by smooting interval*/\n                    function getSmooth(arr,interval){ //#array\n                        smoothened = [];\n                        getMean = funcs.math.getMean;\n                        const arrcpy = arr;\n                        intHalf = Math.floor(interval/2);\n                        for(i=0;i<intHalf;i++){\n                            smoothened.push(arr[i]);\n                        }\n                        for(i = intHalf; i < arr.length - intHalf; i++){\n                            smoothened.push(getMean(arrcpy.slice(i-intHalf,i+interval)));\n                        }\n                        for(i=arr.length - intHalf;i<arr.length;i++){\n                            smoothened.push(arr[i]);\n                        }\n                        return smoothened;\n                    },\n                getCDS://**array with the numeric first or second derivative*/\n                    function getCDS(arr,order){ // # array\n                        let CDS = [0];\n                        const len = arr.length;\n                        switch(order){\n                            case 1:\n                                for(i=1;i<len-1;i++){\n                                    CDS.push((arr[i+1]-arr[i-1])/2);\n                                }\n                                break;\n                            case 2:\n                                for(i=1;i<len-1;i++){\n                                    CDS.push((arr[i+1] -2*arr[i]+arr[i-1]));\n                                }\n                                break;\n                        }\n                        CDS.push(0);\n                        return CDS;\n                    }\n                }\n};\nglobal.set(\"LORIDANE.funcs\",funcs);\nreturn;",
         "outputs": 0,
         "noerr": 0,
         "initialize": "",
@@ -3440,7 +3364,7 @@
         "type": "function",
         "z": "1395c386.064e8c",
         "name": "Values",
-        "func": "values = {\n    allowedFreq:\n        [\n            {min:863,max:864.875,factor:1000},\n            {min:865,max:868.475,factor:100},\n            {min:868.7,max:869.025,factor:1000},\n            {min:869.4,max:869.525,factor:1000},\n            {min:869.7,max:869.875,factor:100}\n        ],\n        freq:{}\n};\nvalues.freq.min = 863;\nvalues.freq.max = 869.875;\n\nglobal.set(\"LORIDANE.values\",values);\nreturn msg;",
+        "func": "values = {\n    allowedFreq:\n        [\n            {min:863,max:864.875,factor:1000},\n            {min:865,max:868.475,factor:100},\n            {min:868.7,max:869.025,factor:1000},\n            {min:869.4,max:869.525,factor:1000},\n            {min:869.7,max:869.875,factor:100}\n        ],\n        freq:{\n            min:863,\n            max:869.875\n        }\n};\n\n\nglobal.set(\"LORIDANE.values\",values);\nreturn msg;",
         "outputs": 0,
         "noerr": 0,
         "initialize": "",
@@ -3599,16 +3523,16 @@
         "name": "",
         "topic": "lora/gateway/#",
         "qos": "1",
-        "datatype": "utf8",
+        "datatype": "buffer",
         "broker": "3be33484.0e776c",
         "nl": false,
         "rap": true,
         "rh": 0,
-        "x": 120,
-        "y": 80,
+        "x": 100,
+        "y": 40,
         "wires": [
             [
-                "6a479509.a7889c"
+                "088ce0e8085dd6d5"
             ]
         ]
     },
@@ -3617,14 +3541,14 @@
         "type": "function",
         "z": "4e984df.de567b4",
         "name": "Process incoming Data",
-        "func": "raw = msg.payload;\nif(raw === \"pong\")return;\nlet lastmsgs = context.get(\"lastmsgs\")||[];\nconst now  = Date.now();\n\n//node.warn(raw)\nfunction extractID(pay){\n    let len = 14;\n    this.node = pay.slice(0,len);\n    this.pay = pay.slice(len,pay.length);\n    return this;\n}\n\nfunction extractDecipher(raw){\n    let message = raw.split('');\n    const payIndex = raw.indexOf('payload') +10;\n    const endIndex = raw.indexOf('gw') -3;\n    let cipherpay = message.splice(payIndex, endIndex - payIndex);\n    const decrypt = global.get(\"LORIDANE.funcs.decrypt\");\n    let clearpay = decrypt(cipherpay.join(''));\n    //node.warn(clearpay)\n    clearpay = clearpay.split('');\n    message.splice(payIndex, 0, clearpay);\n    //node.warn(message.join(''))\n    return message.join('');\n}\nlet input;\n//*/Variant 1 raw json\nif(raw.startsWith(\"{\")){\n    //*/Variant 1 object\n    if(raw.includes('\"payload\":\"NO')){\n        try{\n            input = JSON.parse(raw);\n        }catch(e){\n            node.warn('There is something Wrong with the JSON (Line 37)')\n        }\n    }else{\n        message = extractDecipher(raw);\n        //node.warn(message)\n        try{\n            input = JSON.parse(message);\n        }catch(e){\n            node.warn(`There is something Wrong with the JSON (Line 44) ERR: ${e}`)\n        }\n        \n    }\n    nodedata = input.payload;\n    gateway = input.gw;\n    RSSI = input.rssi;\n    SNR = input.snr;\n    SF = input.sf;\n    freq = input.freq;\n    (isNaN(extractID(nodedata).pay))? payload =  extractID(nodedata).pay : payload = parseFloat(extractID(nodedata).pay);\n    node = extractID(nodedata).node;\n}else{\n    // Extract the data from the LoRa msg if ;-split string\n    input  = msg.payload.split(\";\");\n    nodedata = input[0];\n    if(!nodedata.startsWith(\"NO\")){\n        const decrypt = global.get(\"LORIDANE.funcs.decrypt\");\n        nodedata = decrypt(nodedata);\n    }\n    gateway = extractID(input[1]).node;\n    RSSI = parseInt(input[2]);\n    SNR = parseFloat(input[3]);\n    SF = parseInt(input[4]);\n    freq = parseInt(input[5]);\n    payload = extractID(nodedata).pay;\n    node = extractID(nodedata).node;\n}\n\nignorelist = global.get(\"LORIDANE.ignorelist\")||[];\nignore = (ignorelist.indexOf(node) != -1 && ignorelist.indexOf(gateway) != -1);\n\nif(ignore)return;\n\n// object that takes all data from the msg\nmsg.data = {\n    pay: payload,\n    gw: gateway,\n    node: node,\n    freq: freq,\n    sf: SF,\n    rssi: RSSI,\n    snr: SNR,\n    lastSeen: now,\n};\n    \n//object that will be passed through the core nodes\nmsg.config = {\n    gw: gateway,\n    node: node,\n    freq: freq,\n    sf: SF,\n    lastSeen: now,\n};\nmsg.raw = raw; // the raw LoRa msg\nmsg.payload = payload; // the actual payload\nlet paylens = global.get(\"LORIDANE.values.lastPayloadLens\")||{historic:[],mean:50,toa:83};\nconst getMean = global.get(\"LORIDANE.funcs.math.getMean\");\nconst timeOnAir = global.get(\"LORIDANE.funcs.timeOnAir\");\n\npaylens.historic.unshift(payload.length);\nif(paylens.historic.length >= 20){\n    paylens.historic.pop();\n}\npaylens.mean = getMean(paylens.historic);\npaylens.toa = timeOnAir(paylens.mean,SF);\nglobal.set(\"LORIDANE.values.lastPayloadLens\", paylens);\n\nreturn msg;",
+        "func": "raw = msg.payload;\nif(raw === \"pong\")return;\nlet lastmsgs = context.get(\"lastmsgs\")||[];\nconst now  = Date.now();\nconst decrypt = global.get(\"LORIDANE.funcs.decrypt\");\n\n//node.warn(raw)\nfunction extractID(pay){\n    let len = 14;\n    this.node = pay.slice(0,len);\n    this.pay = pay.slice(len,pay.length);\n    return this;\n}\n\nfunction extractDecipher(raw){\n    let message = raw.split('');\n    const payIndex = raw.indexOf('payload') +10;\n    const endIndex = raw.indexOf('gw') -3;\n    let cipherpay = message.splice(payIndex, endIndex - payIndex);\n    const decrypt = global.get(\"LORIDANE.funcs.decrypt\");\n    let clearpay = decrypt(cipherpay.join(''));\n    //node.warn(clearpay)\n    clearpay = clearpay.split('');\n    message.splice(payIndex, 0, clearpay);\n    //node.warn(message.join(''))\n    return message.join('');\n}\n\n\nlet input;\n//*/Variant 1 raw json\nif(raw.startsWith(\"{\")){\n    //*/Variant 1 object\n    if(raw.includes('\"payload\":\"NO')){\n        try{\n            input = JSON.parse(raw);\n        }catch(e){\n            node.warn('There is something wrong with the JSON (Line 38)')\n        }\n    }else{\n        testcipher: if (msg.cipher){\n            let plain = decrypt(msg.cipher);\n            input = raw.substr(0,msg.startindex)+plain+raw.substr(msg.startindex+1);\n        }else{\n            break testcipher;\n        }\n        //node.warn(message)\n        try{\n            input = JSON.parse(input);\n        }catch(e){\n            node.warn(`There is something wrong with the JSON (Line 51) ERR: ${e}`)\n        }\n    }\n    nodedata = input.payload;\n    gateway = input.gw;\n    RSSI = input.rssi;\n    SNR = input.snr;\n    SF = input.sf;\n    freq = input.freq;\n    payload = (isNaN(extractID(nodedata).pay))? extractID(nodedata).pay : parseFloat(extractID(nodedata).pay);\n    node = extractID(nodedata).node;\n}else{\n    // Extract the data from the LoRa msg if ;-split string\n    input  = msg.payload.split(\";\");\n    nodedata = input[0];\n    if(!nodedata.startsWith(\"NO\")){\n        const decrypt = global.get(\"LORIDANE.funcs.decrypt\");\n        nodedata = decrypt(nodedata);\n    }\n    gateway = extractID(input[1]).node;\n    RSSI = parseInt(input[2]);\n    SNR = parseFloat(input[3]);\n    SF = parseInt(input[4]);\n    freq = parseInt(input[5]);\n    payload = extractID(nodedata).pay;\n    node = extractID(nodedata).node;\n}\n\nignorelist = global.get(\"LORIDANE.ignorelist\")||[];\nignore = (ignorelist.indexOf(node) != -1 || ignorelist.indexOf(gateway) != -1);\nif(ignore)return;\nmsg.data = {};\n// object that takes all data from the msg\nmsg.data = {\n    pay: payload,\n    gw: gateway,\n    node: node,\n    freq: freq,\n    sf: SF,\n    rssi: RSSI,\n    snr: SNR,\n    lastSeen: now,\n};\n  \n//object that will be passed through the core nodes\nmsg.config = {\n    gw: gateway,\n    node: node,\n    freq: freq,\n    sf: SF,\n    lastSeen: now,\n};\nmsg.raw = raw; // the raw LoRa msg\nmsg.payload = payload; // the actual payload\nlet paylens = global.get(\"LORIDANE.values.lastPayloadLens\")||{historic:[],mean:50,toa:83,minInterval:4000};\nconst getMean = global.get(\"LORIDANE.funcs.math.getMean\");\nconst timeOnAir = global.get(\"LORIDANE.funcs.timeOnAir\");\nconst minInterval = global.get(\"LORIDANE.funcs.minInterval\");\n\nif(!isNaN(payloadLength = nodedata.toString().length) ){\n    paylens.historic.unshift(payloadLength);\n    if(paylens.historic.length > 60){\n    paylens.historic.pop();\n    }\n}\n\npaylens.mean = getMean(paylens.historic);\npaylens.toa = timeOnAir(paylens.mean,SF);\npaylens.minInterval = minInterval();\nglobal.set(\"LORIDANE.values.lastPayloadLens\", paylens);\n\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
-        "finalize": "",
+        "finalize": "// Der Code hier wird ausgeführt,\n// wenn der Node gestoppt wird\nwriteConfig = global.get(\"LORIDANE.funcs.writeConfig\");\nwriteConfig();\nreturn;",
         "libs": [],
-        "x": 330,
-        "y": 80,
+        "x": 250,
+        "y": 120,
         "wires": [
             [
                 "1c0ac556.46e25b"
@@ -3653,8 +3577,8 @@
             "340c50f1.6dadc",
             "38d8c130.658fee"
         ],
-        "x": 360,
-        "y": 280,
+        "x": 520,
+        "y": 40,
         "wires": [
             []
         ]
@@ -3670,7 +3594,7 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 820,
+        "x": 580,
         "y": 180,
         "wires": [
             [
@@ -3692,7 +3616,7 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 840,
+        "x": 340,
         "y": 300,
         "wires": [
             [
@@ -3706,7 +3630,7 @@
         "z": "4e984df.de567b4",
         "name": "",
         "env": [],
-        "x": 1300,
+        "x": 820,
         "y": 460,
         "wires": []
     },
@@ -3738,8 +3662,8 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 450,
-        "y": 140,
+        "x": 270,
+        "y": 160,
         "wires": [
             [
                 "f023d975.deb8d8",
@@ -3752,13 +3676,13 @@
         "type": "function",
         "z": "4e984df.de567b4",
         "name": "admit",
-        "func": "node = msg.data.node;\ngw = msg.data.gw;\npayload = msg.payload;\n\nfindGW = global.get(\"LORIDANE.funcs.findGW\");\nfindNode = global.get(\"LORIDANE.funcs.findNode\");\nadmit = global.get(\"LORIDANE.admit\")||[];\ncheckUID = global.get(\"LORIDANE.funcs.checkUID\");\n\n\nindexgw = findGW(gw);\nindexnode = findNode(node);\n\nUIDvalid = (checkUID(node) && checkUID(gw));\nif((indexgw >= 0 && indexnode >= 0) || !UIDvalid )return;\n\nif(indexgw == -1){\n    admit.push(gw);\n}\nif(indexnode == -1){\n    if(payload == node){\n        admit.push(node);\n    }\n}\n\nglobal.set(\"LORIDANE.admit\",admit);\n\nif(admit.length > 0){\n    msg.admit = admit;\n    return msg;\n}\nreturn;",
+        "func": "node = msg.data.node;\ngw = msg.data.gw;\npayload = msg.payload;\n\nfindGW = global.get(\"LORIDANE.funcs.findGW\");\nfindNode = global.get(\"LORIDANE.funcs.findNode\");\nadmit = global.get(\"LORIDANE.admit\")||[];\ncheckUID = global.get(\"LORIDANE.funcs.checkUID\");\n\n\nindexgw = findGW(gw);\nindexnode = findNode(node);\n\nUIDvalid = (checkUID(node) && checkUID(gw));\nif((indexgw >= 0 && indexnode >= 0) || !UIDvalid )return;\n\nif(indexgw == -1){\n    admit.push(gw);\n}\n\nif(indexnode == -1){\n    if(payload == node){\n        admit.push(node);\n    }\n}\n\nglobal.set(\"LORIDANE.admit\",admit);\n\nif(admit.length > 0){\n    msg.admit = admit;\n    return msg;\n}\nreturn;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1040,
+        "x": 910,
         "y": 180,
         "wires": [
             [
@@ -3781,8 +3705,8 @@
         "raw": false,
         "topic": "New Devices ask for Admittance",
         "name": "Admittance",
-        "x": 1190,
-        "y": 180,
+        "x": 1090,
+        "y": 160,
         "wires": [
             [
                 "340c50f1.6dadc"
@@ -3800,8 +3724,8 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1400,
-        "y": 180,
+        "x": 1340,
+        "y": 160,
         "wires": [
             [
                 "6778ed4.7aa9a14"
@@ -3814,8 +3738,8 @@
         "z": "4e984df.de567b4",
         "name": "",
         "events": "all",
-        "x": 1640,
-        "y": 180,
+        "x": 1740,
+        "y": 220,
         "wires": [
             []
         ]
@@ -3831,8 +3755,8 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1440,
-        "y": 300,
+        "x": 1180,
+        "y": 280,
         "wires": [
             [
                 "5e2b324a.5f839c",
@@ -3858,7 +3782,7 @@
         "payload": "",
         "topic": "topic",
         "topicType": "msg",
-        "x": 1300,
+        "x": 1120,
         "y": 240,
         "wires": [
             [
@@ -3871,15 +3795,15 @@
         "id": "c4a84594.067618",
         "type": "function",
         "z": "4e984df.de567b4",
-        "name": "",
+        "name": "set msg options to msg admit",
         "func": "return {options:msg.admit};",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1175,
-        "y": 240,
+        "x": 1035,
+        "y": 200,
         "wires": [
             [
                 "89c2a1bf.a0465"
@@ -3898,8 +3822,8 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1680,
-        "y": 240,
+        "x": 1380,
+        "y": 220,
         "wires": [
             []
         ]
@@ -3916,8 +3840,8 @@
         "complete": "false",
         "statusVal": "",
         "statusType": "auto",
-        "x": 1310,
-        "y": 360,
+        "x": 810,
+        "y": 260,
         "wires": []
     },
     {
@@ -3949,8 +3873,8 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1220,
-        "y": 100,
+        "x": 1060,
+        "y": 80,
         "wires": [
             []
         ]
@@ -3966,8 +3890,8 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 990,
-        "y": 240,
+        "x": 810,
+        "y": 220,
         "wires": [
             [
                 "a918650.4c9da98",
@@ -3986,7 +3910,7 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1170,
+        "x": 990,
         "y": 40,
         "wires": [
             []
@@ -4087,7 +4011,8 @@
         "y": 240,
         "wires": [
             [
-                "4a21c374.73a2cc"
+                "4a21c374.73a2cc",
+                "4caa54e54d0ec49a"
             ],
             [
                 "3a9e2be5.c14f04"
@@ -4098,7 +4023,7 @@
         "id": "4a21c374.73a2cc",
         "type": "function",
         "z": "364ae788.0e6328",
-        "name": "",
+        "name": "return if null",
         "func": "if(msg === null){\n    return;\n}\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
@@ -4118,7 +4043,7 @@
         "id": "3a9e2be5.c14f04",
         "type": "function",
         "z": "364ae788.0e6328",
-        "name": "",
+        "name": "return if null 2",
         "func": "if(msg === null){\n    return;\n}\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
@@ -4176,8 +4101,8 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 870,
-        "y": 160,
+        "x": 850,
+        "y": 100,
         "wires": []
     },
     {
@@ -4204,7 +4129,7 @@
         "type": "function",
         "z": "364ae788.0e6328",
         "name": "write config file",
-        "func": "if(msg.filename === undefined){return}\nconst fs = global.get(\"fs\");\nvar loridane =  global.get(\"LORIDANE\");\nconst configpath = loridane.settings.path.config;\n//delete loridane.timedisk;\ndelete loridane.homepath;\ndelete loridane.settings;\n//loridane.blockONstart = false;\nconst loridaneString = JSON.stringify(loridane,null,2);\nfs.writeFileSync(configpath+\"memCacheLoridane.json\",loridaneString)\nreturn {payload:loridane};",
+        "func": "if(msg.filename === undefined){return}\nconst fs = global.get(\"fs\");\nvar loridane =  global.get(\"LORIDANE\");\nconst configpath = loridane.settings.path.config;\n//delete loridane.timedisk;\ndelete loridane.homepath;\n//delete loridane.settings;\n//loridane.blockONstart = false;\nconst loridaneString = JSON.stringify(loridane,null,2);\nfs.writeFileSync(configpath+\"memCacheLoridane.json\",loridaneString)\nreturn {payload:loridane};",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -4684,7 +4609,7 @@
         "z": "20f0b4a8.24eafc",
         "g": "4936118b.229c4",
         "name": "",
-        "active": false,
+        "active": true,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
@@ -4853,7 +4778,7 @@
         "id": "f4f736ad.a815a8",
         "type": "mqtt out",
         "z": "20f0b4a8.24eafc",
-        "name": "test trigger",
+        "name": "test Node",
         "topic": "lora/gateway/",
         "qos": "0",
         "retain": "false",
@@ -4863,7 +4788,7 @@
         "correl": "",
         "expiry": "",
         "broker": "3be33484.0e776c",
-        "x": 450,
+        "x": 440,
         "y": 80,
         "wires": []
     },
@@ -4882,7 +4807,6 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "",
-        "payload": "",
         "payloadType": "date",
         "x": 160,
         "y": 80,
@@ -4896,8 +4820,8 @@
         "id": "943b015b.8fc56",
         "type": "function",
         "z": "20f0b4a8.24eafc",
-        "name": "",
-        "func": "function randval(min,max){\n    return min+Math.random()*(max-min);\n}\n\nmsg.payload = `{\"payload\":\"NO1234567890AB${randval(1,20000)}\",\n    \"gw\":\"GW1234567890AB\",\n    \"rssi\":${Math.round(randval(-120,0))},\n    \"snr\":${randval(-10,12)},\n    \"sf\":7,\n    \"freq\":867000000}`;\nreturn msg;",
+        "name": "emulate node",
+        "func": "function randval(min,max){\n    return min+Math.random()*(max-min);\n}\n\nmsg.payload = `{\"payload\":\"NO1234567890AB${Math.round(randval(1,2000000))/100}\",\\\n\"gw\":\"GW1234567890AB\",\\\n\"rssi\":${Math.round(randval(-120,0))},\\\n\"snr\":${Math.round(randval(-10,12))},\\\n\"sf\":7,\\\n\"freq\":867000000}`;\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -4907,7 +4831,8 @@
         "y": 80,
         "wires": [
             [
-                "f4f736ad.a815a8"
+                "f4f736ad.a815a8",
+                "4782ee921ccea2a0"
             ]
         ],
         "l": false
@@ -4947,7 +4872,7 @@
         "type": "function",
         "z": "f74e4d3b7750f42f",
         "name": "analyse payload",
-        "func": "if(msg.payload[0] == \"+\"){\n    return;\n}\n\nlet pay = [];\nlet payloadobject = {};\n\nif(typeof(msg.payload) != \"number\"){\n    if (msg.payload.includes(\";\")){\n        pay = msg.payload.split(\";\");    \n    }else{\n        pay[0] = msg.payload;\n    }\n}else{\n     pay[0] = msg.payload;\n}\n\n// split payloads to  measure0, measure1,....and so on\nlet i = 0;\nfor(let val of pay){\n    if(typeof(val) == \"number\"){\n        val = parseFloat(val);\n    }\n    payloadobject[`measure${i}`] = val;\n    i++;\n}\nmsg.payload = payloadobject;\nreturn msg;",
+        "func": "if(msg.payload[0] == \"+\"){\n    return;\n}\n\nlet pay = [];\nlet payloadobject = {};\n\nif(typeof(msg.payload) != \"number\"){\n    if (msg.payload.includes(\";\")){\n        pay = msg.payload.split(\";\");    \n    }else{\n        pay[0] = msg.payload;\n    }\n}else{\n     pay[0] = msg.payload;\n}\n\n// split payloads to  measure0, measure1,....and so on\nlet i = 0;\nfor(let val of pay){\n    if(num = parseFloat(val), typeof(num) == \"number\"){\n        val = num;\n    }\n    payloadobject[`measure${i}`] = val;\n    i++;\n}\nmsg.payload = payloadobject;\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -4966,7 +4891,7 @@
         "type": "function",
         "z": "f74e4d3b7750f42f",
         "name": "Set DataSet",
-        "func": "let data = msg.data\nconst UID = data.node;\nlet time = new Date(data.lastSeen)||new Date.now();\nlet showtime = time.toLocaleString(\"de-DE\");\nlet date = time.toISOString().substr(0,7);\nconst USER = global.get(\"LORIDANE.LinuxUsername\");\n\nmsg.payload.time = showtime;\nmsg.payload.timestamp = data.lastSeen;\nmsg.payload.uid = UID;\n\nif(msg.payload !== null)msg.filename = `/home/${USER}/LORIDANE/database/${UID}/${UID}_${date}.json`;\nglobal.set(`LORIDANE.data.${UID}.lastreading`,msg.payload);\nreturn msg;",
+        "func": "let data = msg.data\nconst UID = data.node;\nlet time = new Date(data.lastSeen)||new Date.now();\nlet showtime = time.toLocaleString(\"de-DE\");\nlet date = time.toISOString().substr(0,7);\nconst USER = global.get(\"LORIDANE.LinuxUsername\");\n\nmsg.payload.time = showtime;\nmsg.payload.timestamp = data.lastSeen;\nmsg.payload.uid = UID;\n\nif(msg.payload !== null)msg.filename = `/home/${USER}/LORIDANE/database/${UID}/${UID}_${date}.json`;\nmsg.dir = `/home/${USER}/LORIDANE/database/${UID}`;\nglobal.set(`LORIDANE.data.${UID}.lastreading`,msg.payload);\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -5977,7 +5902,7 @@
         "z": "b9c36c50122d3534",
         "name": "Listen to device",
         "serial": "d726f7d4.e188a8",
-        "x": 200,
+        "x": 100,
         "y": 160,
         "wires": [
             [
@@ -5993,27 +5918,30 @@
         "z": "b9c36c50122d3534",
         "name": "Write to device",
         "serial": "d726f7d4.e188a8",
-        "x": 820,
-        "y": 160,
+        "x": 840,
+        "y": 200,
         "wires": []
     },
     {
         "id": "489395b840d57d55",
         "type": "function",
         "z": "b9c36c50122d3534",
-        "name": "",
-        "func": "trigger = msg.payload;\n//trigger.replace(/\\r\\n|\\r|\\n/g,\"\")\nmsg = {payload: trigger};\n\ncases = [\n    \"Please Enter Your WiFi-SSID\",\n    \"Please Enter Your WiFi-Password\",\n    \"Please Enter the Address Of Your MQTT Broker without the Port\",\n    \"Please Enter the Username Of Your MQTT Broker\",\n    \"Please Enter the Password for Your MQTT Broker\",\n    ]\n\nfor(var pat of cases){\n    if (trigger.includes(pat)){\n        return msg;\n    }else{\n        continue;  \n    }\n}\nreturn;",
-        "outputs": 1,
+        "name": "parse serial input stream",
+        "func": "trigger = msg.payload;\n//trigger.replace(/\\r\\n|\\r|\\n/g,\"\")\nmsg = {payload: trigger};\n\ncases = [\n    \"Please Enter Your WiFi-SSID\",\n    \"Please Enter Your WiFi-Password\",\n    \"Please Enter the Address Of Your MQTT Broker without the Port\",\n    \"Please Enter the Username Of Your MQTT Broker\",\n    \"Please Enter the Password for Your MQTT Broker\",\n    ]\n    \nlet autoOutput;\nfor(let pat in cases){\n    if (trigger.includes(cases[pat])){\n        let gatewayConfig = global.get(\"LORIDANE.settings.gatewayConfig\") || {};\n        if (gatewayConfig != {} && gatewayConfig.automatic){\n            let autoOutput = '';\n            node.warn('Gateway Auto Configuration')\n            switch(pat){\n                case \"0\":\n                    autoOutput = gatewayConfig.ssid+'\\n';\n                    break;\n                case \"1\":\n                    autoOutput = gatewayConfig.wpwd+'\\n';\n                    break;\n                case \"2\":\n                    autoOutput = gatewayConfig.broker+'\\n';\n                    break;\n                case \"3\":\n                    autoOutput = gatewayConfig.user+'\\n';\n                    break;\n                case \"4\":\n                    autoOutput = gatewayConfig.mpwd+'\\n';\n                    break;\n                default:\n                    node.warn('no case met')\n                    return;\n            }\n            return [null,{payload:autoOutput}];\n        }\n        return [msg,null];\n    }else{\n        continue;  \n    }\n}\nreturn;",
+        "outputs": 2,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 380,
-        "y": 160,
+        "x": 310,
+        "y": 180,
         "wires": [
             [
-                "53bfad030d9cd90a",
-                "2025553245eafb29"
+                "2025553245eafb29",
+                "0081140cd5374547"
+            ],
+            [
+                "9443f601f2e54a8b"
             ]
         ]
     },
@@ -6032,7 +5960,7 @@
         "className": "",
         "topic": "",
         "name": "Input Dialog Creds",
-        "x": 590,
+        "x": 610,
         "y": 160,
         "wires": [
             [
@@ -6109,8 +6037,8 @@
         "complete": "false",
         "statusVal": "",
         "statusType": "auto",
-        "x": 390,
-        "y": 120,
+        "x": 330,
+        "y": 60,
         "wires": []
     },
     {
@@ -6141,7 +6069,7 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 350,
+        "x": 230,
         "y": 240,
         "wires": [
             [
@@ -6164,7 +6092,7 @@
         "className": "",
         "topic": "",
         "name": "",
-        "x": 470,
+        "x": 270,
         "y": 300,
         "wires": []
     },
@@ -6355,7 +6283,7 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 1230,
+        "x": 1070,
         "y": 920,
         "wires": []
     },
@@ -6364,7 +6292,7 @@
         "type": "function",
         "z": "0b3f1702fe1b5fd1",
         "name": "mean power by time",
-        "func": "const interval = msg.params.interval;\nconst starttime = msg.params.starttime;\nconst endtime = starttime + interval;\nconst costPerKwh = msg.params.costPerKwh;\nlet data = msg.data;\nconst IRO = global.get(\"LORIDANE.funcs.inRangeOf\");\nlet powers = [];\nlet timespan = [];\nmsg.out = {};\n\n//set propwerty Key here\nconst powerKey = 'measure1';\n\nfor (i = 0; i<data.length;i++){\n    if(IRO(data[i].timestamp,starttime,endtime)){\n        if (!isNaN(data[i][powerKey])){\n            timespan.push(data[i].timestamp);\n            powers.push(parseFloat(data[i][powerKey]));\n        }\n    }\n}\n\nspan = timespan[timespan.length-1] - timespan[0];\n\nfor (i = 1; i < powers.length; i++){\n    powers[i] *= (timespan[i] - timespan[i-1]);\n}\n\n//node.warn(powers)\npower = powers.reduce((left,right) => left + right);\npower /=  span;\n\n\nmsg.out.powers = powers;\nmsg.out.meanPower  = power;\ncost = power/1000 * costPerKwh * span/36e5;\nmsg.out.costPerInterval = cost;\nreturn msg;",
+        "func": "const interval = msg.params.interval;\nconst starttime = msg.params.starttime;\nconst endtime = starttime + interval;\nconst costPerKwh = msg.params.costPerKwh;\nlet data = msg.data;\nconst IRO = global.get(\"LORIDANE.funcs.inRangeOf\");\nlet powers = [];\nlet timespan = [];\nmsg.out = {};\n\n//set property Key here\nconst powerKey = 'measure1';\n\nfor (i = 0; i<data.length;i++){\n    if(IRO(data[i].timestamp,starttime,endtime)){\n        if (!isNaN(data[i][powerKey])){\n            timespan.push(data[i].timestamp);\n            powers.push(parseFloat(data[i][powerKey]));\n        }\n    }\n}\n\nspan = timespan[timespan.length-1] - timespan[0];\n\nfor (i = 1; i < powers.length; i++){\n    powers[i] *= (timespan[i] - timespan[i-1]);\n}\n\n//node.warn(powers)\npower = powers.reduce((left,right) => left + right);\npower /=  span;\n\n\nmsg.out.powers = powers;\nmsg.out.meanPower  = power;\ncost = power/1000 * costPerKwh * span/36e5;\nmsg.out.costPerInterval = cost;\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -6416,8 +6344,8 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 570,
-        "y": 1080,
+        "x": 470,
+        "y": 1120,
         "wires": [
             [
                 "67e7dc8e5e0d33a7"
@@ -6493,15 +6421,15 @@
         "id": "67e7dc8e5e0d33a7",
         "type": "function",
         "z": "0b3f1702fe1b5fd1",
-        "name": "",
+        "name": "delete unrequired property",
         "func": "data = msg.data\nstarttime = data[0].timestamp\nlet count = 1\nfor(var date of data){\n    delete date.reading\n    delete date.powerunit\n    delete date.readingunit\n    delete date.time\n    date.reltime = date.timestamp - starttime;\n    date.id = \"R\"+count;\n    count++;\n}\nmsg.data = data;\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 740,
-        "y": 1080,
+        "x": 580,
+        "y": 1160,
         "wires": [
             [
                 "7b804f9ff2308e9f"
@@ -6512,15 +6440,15 @@
         "id": "7b804f9ff2308e9f",
         "type": "function",
         "z": "0b3f1702fe1b5fd1",
-        "name": "",
+        "name": "process labels",
         "func": "data = msg.data\niro = global.get(\"LORIDANE.funcs.inRangeOf\");\n\nfor(var i in data){\n    if(iro(data[i].power,0,47)){\n        data[i].pid = \"idle\"\n    }else if(iro(data[i].power,47,52.5)){\n        data[i].pid = \"downstream\"\n    }else if(iro(data[i].power,52.5,10)){\n        data[i].pid = \"upstream\"\n    }else if(iro(data[i].power,55,1000)){\n        data[i].pid = \"calculation\"\n    }\n}\nmsg.data = data;\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 880,
-        "y": 1080,
+        "x": 680,
+        "y": 1200,
         "wires": [
             [
                 "1c032af464f2e330"
@@ -6531,15 +6459,15 @@
         "id": "1c032af464f2e330",
         "type": "function",
         "z": "0b3f1702fe1b5fd1",
-        "name": "",
+        "name": "calculate duration",
         "func": "data = msg.data\nlen = data.length\ndata[0].dur = 0;\nfor(i=1;i<len;i++){\n    data[i].dur = Math.round((data[i].reltime - data[i-1].reltime)/1e3);\n}\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1020,
-        "y": 1080,
+        "x": 790,
+        "y": 1240,
         "wires": [
             [
                 "8babc9f33f594710",
@@ -6551,15 +6479,15 @@
         "id": "8babc9f33f594710",
         "type": "function",
         "z": "0b3f1702fe1b5fd1",
-        "name": "",
+        "name": "objects to json file",
         "func": "for (var date of msg.data){\n    node.send({payload:date})\n}\nreturn;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 840,
-        "y": 1160,
+        "x": 1030,
+        "y": 1240,
         "wires": [
             [
                 "18b06a85b8a73543"
@@ -6576,8 +6504,8 @@
         "createDir": true,
         "overwriteFile": "false",
         "encoding": "none",
-        "x": 1150,
-        "y": 1160,
+        "x": 1330,
+        "y": 1240,
         "wires": [
             []
         ]
@@ -6586,15 +6514,15 @@
         "id": "57fd659f2ac85919",
         "type": "function",
         "z": "0b3f1702fe1b5fd1",
-        "name": "",
+        "name": "convergence matrix to csv",
         "func": "data = msg.data;\nlen = data.length\nfirstline = \"\";\n\nfunction getEdge(bar1,bar2){\n    let edgeweight = 0;\n    let interval = bar2.reltime - bar1.reltime\n    if(bar1.reltime == bar2.reltime)return 0;\n    if(Math.abs(interval > 600000))return 0;\n    //compare power\n        if(bar1.pid == bar2.pid){\n        edgeweight += 1;\n    }\n    if((bar1.pstart && bar2.pstart) ||(bar1.pstart === false && bar2.pstart === false)){\n        edgeweight += 2;\n    }\n    if(Math.abs(interval < 600000)){\n        edgeweight += interval/1e4;\n    }\n    return edgeweight;\n}\n\nfor(var date of data){\n    append = \";\"+date.id;\n    firstline += append\n}\nnode.send({payload:firstline});\n\nfor (i=0;i<len;i++){\n    output = \"\"\n    output += data[i].id\n    for(j=0;j<len;j++){\n       output += \";\"+getEdge(data[i],data[j]);\n    }\n    node.send({payload:output})\n}\n\nreturn;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1300,
-        "y": 1100,
+        "x": 970,
+        "y": 1320,
         "wires": [
             [
                 "24b1eca37384f932"
@@ -6611,8 +6539,8 @@
         "createDir": true,
         "overwriteFile": "false",
         "encoding": "none",
-        "x": 1620,
-        "y": 1100,
+        "x": 1380,
+        "y": 1320,
         "wires": [
             []
         ]
@@ -6621,15 +6549,15 @@
         "id": "f91cb91215f9d412",
         "type": "function",
         "z": "0b3f1702fe1b5fd1",
-        "name": "",
+        "name": "compare pid",
         "func": "data = msg.data\nlen = data.length;\ndata[0].pstart = true;\n\nfor (i = 2; i<len; i++){\n    if (data[i].pid != data[i-1].pid){\n        data[i].pstart = true\n        data[i-1].pstart = false\n    }\n}\n\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1170,
-        "y": 1080,
+        "x": 850,
+        "y": 1280,
         "wires": [
             [
                 "57fd659f2ac85919",
@@ -6716,7 +6644,8 @@
         "y": 120,
         "wires": [
             [
-                "84383d973c491d60"
+                "84383d973c491d60",
+                "c0a3aa7bc8ce6775"
             ]
         ]
     },
@@ -6734,8 +6663,8 @@
         "correl": "",
         "expiry": "",
         "broker": "3be33484.0e776c",
-        "x": 690,
-        "y": 180,
+        "x": 730,
+        "y": 160,
         "wires": []
     },
     {
@@ -6829,7 +6758,7 @@
         "winHide": false,
         "oldrc": false,
         "name": "",
-        "x": 910,
+        "x": 990,
         "y": 400,
         "wires": [
             [],
@@ -6864,14 +6793,14 @@
         "id": "58b96b7be58245f6",
         "type": "function",
         "z": "1395c386.064e8c",
-        "name": "",
+        "name": "return if payload undefined",
         "func": "if(!msg.payload){\n    return msg;\n}\nreturn;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 640,
+        "x": 680,
         "y": 380,
         "wires": [
             [
@@ -6900,14 +6829,14 @@
         "id": "40c4880ff2097a1c",
         "type": "function",
         "z": "f74e4d3b7750f42f",
-        "name": "Write to File",
-        "func": "const fs = global.get(\"fs\");\n\nfs.appendFile(msg.filename, JSON.stringify(msg.payload)+'\\n', err => {\n  if (err) {\n    console.error(err);\n    return\n  }\n  //file written successfully\n})\nnode.status({text:msg.filename});\nreturn msg;",
+        "name": "write dataset to File",
+        "func": "const fs = global.get(\"fs\");\nconst dir = msg.dir;\ntry{\n    fs.appendFile(msg.filename, JSON.stringify(msg.payload)+'\\n', err => {\n    if (err) node.warn(err);\n    if (!fs.existsSync(dir)){\n        fs.mkdirSync(dir);\n        fs.appendFileSync(msg.filename,JSON.stringify(msg.payload)+'\\n');\n    }\n    });\n    \n}catch(err) {\n    node.warn(err)\n    fs.writeFileSync(msg.filename, JSON.stringify(msg.payload)+'\\n');\n}\n  //file written successfully\nnode.status({text:msg.filename});\nreturn msg;",
         "outputs": 0,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 870,
+        "x": 890,
         "y": 180,
         "wires": []
     },
@@ -6965,122 +6894,8 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 990,
-        "y": 1220,
-        "wires": []
-    },
-    {
-        "id": "b7afa9e2bbdcfce3",
-        "type": "inject",
-        "z": "922120e5.5b086",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "",
-        "payloadType": "date",
-        "x": 240,
-        "y": 2440,
-        "wires": [
-            [
-                "ef31e46db222ac56"
-            ]
-        ]
-    },
-    {
-        "id": "ef31e46db222ac56",
-        "type": "function",
-        "z": "922120e5.5b086",
-        "name": "Load Files",
-        "func": "const fs = global.get(\"fs\");\nconst homepath = global.get(\"LORIDANE.settings.path.database\");\nlet files = [];\nlet pathes = [];\n\nfunction traverseDir(dir) {\n    if(dir[dir.length-1]!= \"/\") dir = dir+\"/\";\n        fs.readdirSync(dir).forEach(file => {\n        let fullPath = dir+file;\n        \n        if (fs.lstatSync(fullPath).isDirectory()) {\n            traverseDir(fullPath);\n        } else {\n            files.push(file.replace(\".json\",\"\"));\n            pathes.push(fullPath)\n        }  \n   });\n   return pathes;\n}\n\ntraverseDir(homepath);\nmsg.files = files;\nmsg.pathes = pathes;\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 390,
-        "y": 2440,
-        "wires": [
-            [
-                "8e09539089fed853"
-            ]
-        ]
-    },
-    {
-        "id": "8e09539089fed853",
-        "type": "function",
-        "z": "922120e5.5b086",
-        "name": "export to CSV",
-        "func": "const fs = global.get(\"fs\");\nconst homepath = global.get(\"LORIDANE.settings.path.database\");\nconst files = msg.files;\nconst pathes = msg.pathes;\nlet content = {};\nconst delimiter = global.get(\"LORIDANE.settings.csvDelimiter\")\n// foos-------------------------------------------------\nfunction parseJSON(str) {\n   try {\n      return JSON.parse(str);\n   }\n   catch (e) {\n      //node.warn(e);\n      return;\n   }\n}\n\nfunction getFirstLine(obj){\n    let props = Object.keys(obj);\n    return props.join(';')+'\\n';\n}\n\nfunction readFile2Arr(path){\n    let output = [];\n    let lines;\n    const fs = global.get(\"fs\");\n    try {\n        lines = fs.readFileSync(path).toString().split(\"\\n\");\n    }\n    catch (e){\n        node.warn(e);\n        return;\n    }\n    \n    for(let line of lines){\n        output.push(parseJSON(line));\n    }\n    return output;\n}\n\nfunction makeCSV(line){\n    let output = '';\n    let arr;\n    try{\n        arr = Object.values(line);\n    }\n    catch(e){\n        return;\n    }\n    \n    output = arr.join(delimiter);\n    return output + '\\n';\n}\n\nfunction * readFiles(pathes, files){\n    let len = files.length;\n    for (let path in pathes){\n        let fileContent = readFile2Arr(pathes[path]);\n        \n        let firstLine = getFirstLine(fileContent[0]);\n        let file = firstLine;\n        for (let line of fileContent){\n            file += makeCSV(line);\n        }\n        yield {name:files[path]+'.csv',content:file,stateQuo:`Processing File ${parseInt(path)+1} of ${len}.`};\n    }\n}\n//foos end----------------------------------------------------\nlet read = readFiles(pathes,files);\ncontent = read.next();\nwhile (!content.done) {\n        node.send({topic:content.value.stateQuo,toast:true});\n        fs.writeFileSync(homepath+content.value.name,content.value.content);\n        content = read.next();\n}\nnode.send({topic: `All Files exported to CSV. They are in ${homepath}`,toast:false});\n\nreturn;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 580,
-        "y": 2440,
-        "wires": [
-            [
-                "8ce3d5f43965efad"
-            ]
-        ]
-    },
-    {
-        "id": "b4b6bbc666e9d760",
-        "type": "ui_button",
-        "z": "922120e5.5b086",
-        "name": "",
-        "group": "06efc03a6ebef2e8",
-        "order": 0,
-        "width": 0,
-        "height": 0,
-        "passthru": false,
-        "label": "Export Node Data as CSV",
-        "tooltip": "",
-        "color": "",
-        "bgcolor": "",
-        "className": "",
-        "icon": "",
-        "payload": "",
-        "payloadType": "date",
-        "topic": "topic",
-        "topicType": "msg",
-        "x": 230,
-        "y": 2380,
-        "wires": [
-            [
-                "ef31e46db222ac56"
-            ]
-        ]
-    },
-    {
-        "id": "8ce3d5f43965efad",
-        "type": "ui_toast",
-        "z": "922120e5.5b086",
-        "position": "top right",
-        "displayTime": "5",
-        "highlight": "",
-        "sendall": true,
-        "outputs": 0,
-        "ok": "OK",
-        "cancel": "",
-        "raw": false,
-        "className": "",
-        "topic": "",
-        "name": "Toast Notification",
-        "x": 810,
-        "y": 2440,
+        "x": 1530,
+        "y": 1000,
         "wires": []
     },
     {
@@ -7313,7 +7128,7 @@
         "name": "",
         "topic": "lora/gateway/#",
         "qos": "1",
-        "datatype": "utf8",
+        "datatype": "buffer",
         "broker": "3be33484.0e776c",
         "nl": false,
         "rap": true,
@@ -7322,7 +7137,7 @@
         "y": 1740,
         "wires": [
             [
-                "33821aa6b1a0907a"
+                "56b04d39a183b93b"
             ]
         ]
     },
@@ -7337,8 +7152,8 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 490,
-        "y": 1760,
+        "x": 890,
+        "y": 1680,
         "wires": [
             [
                 "840d64d817252e5e"
@@ -7358,8 +7173,8 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 680,
-        "y": 1740,
+        "x": 1080,
+        "y": 1660,
         "wires": []
     },
     {
@@ -7375,31 +7190,12 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 470,
-        "y": 1700,
+        "x": 710,
+        "y": 1720,
         "wires": []
     },
     {
-        "id": "027a95c7d450c756",
-        "type": "function",
-        "z": "20f0b4a8.24eafc",
-        "name": "",
-        "func": "\ndecrypt = global.get(\"LORIDANE.funcs.decrypt\");\nplaintext = decrypt(ciphertext.toString());\n\nreturn {payload:plaintext};",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 520,
-        "y": 1560,
-        "wires": [
-            [
-                "ae4403c164fbd038"
-            ]
-        ]
-    },
-    {
-        "id": "06259921087df6da",
+        "id": "16b7636aa918d881",
         "type": "inject",
         "z": "20f0b4a8.24eafc",
         "name": "",
@@ -7419,16 +7215,159 @@
         "topic": "",
         "payload": "",
         "payloadType": "date",
-        "x": 180,
-        "y": 1500,
+        "x": 1500,
+        "y": 540,
         "wires": [
             [
-                "027a95c7d450c756"
+                "06788427bde848a3"
             ]
         ]
     },
     {
-        "id": "ae4403c164fbd038",
+        "id": "06788427bde848a3",
+        "type": "function",
+        "z": "20f0b4a8.24eafc",
+        "name": "Load Files",
+        "func": "const fs = global.get(\"fs\");\nconst homepath = global.get(\"LORIDANE.settings.path.database\");\nlet files = [];\nlet pathes = [];\n\nfunction traverseDir(dir) {\n    if(dir[dir.length-1]!= \"/\") dir = dir+\"/\";\n        fs.readdirSync(dir).forEach(file => {\n        let fullPath = dir+file;\n        \n        if (fs.lstatSync(fullPath).isDirectory()) {\n            traverseDir(fullPath);\n        } else {\n            files.push(file.replace(\".json\",\"\"));\n            pathes.push(fullPath)\n        }  \n   });\n   return pathes;\n}\n\ntraverseDir(homepath);\nmsg.files = files;\nmsg.pathes = pathes;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1650,
+        "y": 560,
+        "wires": [
+            [
+                "c25fe67afc2bd567",
+                "40ea27940353c873",
+                "48e1ec0e129b27d9"
+            ]
+        ]
+    },
+    {
+        "id": "40ea27940353c873",
+        "type": "function",
+        "z": "20f0b4a8.24eafc",
+        "name": "export to CSV",
+        "func": "\tconst fs = global.get(\"fs\");\n\tconst homepath = global.get(\"LORIDANE.settings.path.database\");\n\tconst files = msg.files;\n\tconst pathes = msg.pathes;\n\tlet content = {};\n\tconst delimiter = global.get(\"LORIDANE.settings.csvDelimiter\")\n\t// foos-------------------------------------------------\n\tfunction parseJSON(str) {\n\t   try {\n\t      return JSON.parse(str);\n\t   }\n\t   catch (e) {\n\t      //node.warn(e);\n\t      return;\n\t   }\n\t}\n\t\n\tfunction getFirstLine(obj){\n\t    let props = Object.keys(obj);\n\t    return props.join(';')+'\\n';\n\t}\n\t\n\tfunction readFile2Arr(path){\n\t    let output = [];\n\t    let lines;\n\t    const fs = global.get(\"fs\");\n\t    try {\n\t        lines = fs.readFileSync(path).toString().split(\"\\n\");\n\t    }\n\t    catch (e){\n\t        node.warn(e);\n\t        return;\n\t    }\n\t    \n\t    for(let line of lines){\n\t        output.push(parseJSON(line));\n\t    }\n\t    return output;\n\t}\n\t\n\tfunction makeCSV(line){\n\t    let output = '';\n\t    let arr;\n\t    try{\n\t        arr = Object.values(line);\n\t    }\n\t    catch(e){\n\t        return;\n\t    }\n\t    \n\t    output = arr.join(delimiter);\n\t    return output + '\\n';\n\t}\n\t\n\tfunction * readFiles(pathes, files){\n\t    let len = files.length;\n\t    for (let path in pathes){\n\t        let fileContent = readFile2Arr(pathes[path]);\n\t        \n\t        let firstLine = getFirstLine(fileContent[0]);\n\t        let file = firstLine;\n\t        for (let line of fileContent){\n\t            file += makeCSV(line);\n\t        }\n\t        yield {name:files[path]+'.csv',content:file,stateQuo:`Processing File ${parseInt(path)+1} of ${len}.`};\n\t    }\n\t}\n\t//foos end----------------------------------------------------\n\tlet read = readFiles(pathes,files);\n\t\n\tcontent = read.next();\n\twhile (!content.done) {\n\t        node.send({topic:content.value.stateQuo,toast:true});\n\t        fs.writeFileSync(homepath+content.value.name,content.value.content);\n\t        content = read.next();\n\t}\n\tnode.send({topic: `All Files exported to CSV. They are in ${homepath}`,toast:false});\n\t\n\treturn;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1920,
+        "y": 580,
+        "wires": [
+            [
+                "48e1ec0e129b27d9"
+            ]
+        ]
+    },
+    {
+        "id": "6160c8e61024f0a1",
+        "type": "ui_button",
+        "z": "20f0b4a8.24eafc",
+        "name": "",
+        "group": "06efc03a6ebef2e8",
+        "order": 0,
+        "width": 0,
+        "height": 0,
+        "passthru": false,
+        "label": "Export Node Data as CSV",
+        "tooltip": "",
+        "color": "",
+        "bgcolor": "",
+        "className": "",
+        "icon": "",
+        "payload": "",
+        "payloadType": "date",
+        "topic": "topic",
+        "topicType": "msg",
+        "x": 1470,
+        "y": 620,
+        "wires": [
+            [
+                "06788427bde848a3"
+            ]
+        ]
+    },
+    {
+        "id": "3661e3d9a3c9ca57",
+        "type": "ui_toast",
+        "z": "20f0b4a8.24eafc",
+        "position": "top right",
+        "displayTime": "5",
+        "highlight": "",
+        "sendall": true,
+        "outputs": 0,
+        "ok": "OK",
+        "cancel": "",
+        "raw": false,
+        "className": "",
+        "topic": "",
+        "name": "Toast Notification",
+        "x": 2210,
+        "y": 520,
+        "wires": []
+    },
+    {
+        "id": "c25fe67afc2bd567",
+        "type": "debug",
+        "z": "20f0b4a8.24eafc",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1810,
+        "y": 500,
+        "wires": []
+    },
+    {
+        "id": "56b04d39a183b93b",
+        "type": "function",
+        "z": "20f0b4a8.24eafc",
+        "name": "analyse buffer test",
+        "func": "buffer = msg.payload;\n\nstartindex = 12;\nendindex = 12+32;//buffer.indexOf(0x22,12);\n\nfirstpart = buffer.slice(0,startindex)\npayload = buffer.slice(startindex,endindex);\nendpart = buffer.slice(endindex);\nmsg.payload = {encrypted: payload,start:firstpart, end:endpart, text:firstpart.toString()+endpart.toString()}\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 500,
+        "y": 1780,
+        "wires": [
+            [
+                "33821aa6b1a0907a",
+                "310a7533ec09e440"
+            ]
+        ]
+    },
+    {
+        "id": "310a7533ec09e440",
+        "type": "function",
+        "z": "20f0b4a8.24eafc",
+        "name": "decryption test",
+        "func": "decrypt = global.get(\"LORIDANE.funcs.decrypt\");\n\n//node.warn(msg.payload.encrypted);\nmsg.decrypt = decrypt(msg.payload.encrypted);\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 830,
+        "y": 1800,
+        "wires": [
+            [
+                "d27eaeece1281a25"
+            ]
+        ]
+    },
+    {
+        "id": "d27eaeece1281a25",
         "type": "debug",
         "z": "20f0b4a8.24eafc",
         "name": "",
@@ -7440,8 +7379,408 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 670,
-        "y": 1560,
+        "x": 1030,
+        "y": 1800,
         "wires": []
+    },
+    {
+        "id": "48e1ec0e129b27d9",
+        "type": "switch",
+        "z": "20f0b4a8.24eafc",
+        "name": "",
+        "property": "toast",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "false"
+            },
+            {
+                "t": "else"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 2075,
+        "y": 540,
+        "wires": [
+            [
+                "3661e3d9a3c9ca57"
+            ],
+            [
+                "8c2e6ec2ea15bed3"
+            ]
+        ],
+        "l": false
+    },
+    {
+        "id": "8c2e6ec2ea15bed3",
+        "type": "ui_toast",
+        "z": "20f0b4a8.24eafc",
+        "position": "dialog",
+        "displayTime": "5",
+        "highlight": "",
+        "sendall": true,
+        "outputs": 1,
+        "ok": "OK",
+        "cancel": "",
+        "raw": false,
+        "className": "",
+        "topic": "msg.topic",
+        "name": "Toast Notification",
+        "x": 2210,
+        "y": 580,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "5731a85d08ea3dd5",
+        "type": "function",
+        "z": "922120e5.5b086",
+        "name": "clear Ignore an admission list",
+        "func": "list = [];\nglobal.set(\"LORIDANE.ignorelist\",list);\nglobal.set(\"LORIDANE.admit\",list);\nreturn;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 500,
+        "y": 640,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "12abec650d9f6642",
+        "type": "ui_button",
+        "z": "922120e5.5b086",
+        "name": "",
+        "group": "1152859e.ef93ba",
+        "order": 1,
+        "width": "8",
+        "height": 1,
+        "passthru": false,
+        "label": "clear ignorelist",
+        "tooltip": "",
+        "color": "",
+        "bgcolor": "",
+        "className": "",
+        "icon": "",
+        "payload": "",
+        "payloadType": "date",
+        "topic": "topic",
+        "topicType": "msg",
+        "x": 260,
+        "y": 640,
+        "wires": [
+            [
+                "5731a85d08ea3dd5"
+            ]
+        ]
+    },
+    {
+        "id": "4782ee921ccea2a0",
+        "type": "debug",
+        "z": "20f0b4a8.24eafc",
+        "name": "",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 466,
+        "y": 27,
+        "wires": []
+    },
+    {
+        "id": "4caa54e54d0ec49a",
+        "type": "change",
+        "z": "364ae788.0e6328",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "LORIDANE.values.lastPayloadLens.minInterval",
+                "tot": "global"
+            },
+            {
+                "t": "set",
+                "p": "topic",
+                "pt": "msg",
+                "to": "For the current parameters the minimum node interval is (ms):",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 575,
+        "y": 180,
+        "wires": [
+            [
+                "064c82486d9e8731"
+            ]
+        ],
+        "l": false
+    },
+    {
+        "id": "064c82486d9e8731",
+        "type": "ui_text",
+        "z": "364ae788.0e6328",
+        "group": "4640ddc61a547a32",
+        "order": 2,
+        "width": "8",
+        "height": "2",
+        "name": "",
+        "label": "{{msg.topic}}",
+        "format": "{{msg.payload}}",
+        "layout": "col-center",
+        "className": "",
+        "x": 700,
+        "y": 180,
+        "wires": []
+    },
+    {
+        "id": "b62026e6367c3ae2",
+        "type": "function",
+        "z": "c23de0ef.dae5f",
+        "name": "set sync interval",
+        "func": "const interval = global.get(\"LORIDANE.settings.syncInterval\")||233;\n\nfunction trigger(){\n    node.send({payload:true});\n}\n\nlet intVal = context.get(\"intVal\");\nclearInterval(intVal);\n\nintVal = setInterval(trigger,interval * 1000);\ncontext.set(\"intVal\",intVal);\nreturn;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 80,
+        "wires": [
+            [
+                "47d49580.9cf8dc"
+            ]
+        ]
+    },
+    {
+        "id": "0081140cd5374547",
+        "type": "function",
+        "z": "b9c36c50122d3534",
+        "name": "filter null msg",
+        "func": "if (msg === null){\n    return;\n}\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 475,
+        "y": 160,
+        "wires": [
+            [
+                "53bfad030d9cd90a"
+            ]
+        ],
+        "l": false
+    },
+    {
+        "id": "e604d18b909fb87d",
+        "type": "debug",
+        "z": "b9c36c50122d3534",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 610,
+        "y": 360,
+        "wires": []
+    },
+    {
+        "id": "c293f39ddc15f47b",
+        "type": "function",
+        "z": "1395c386.064e8c",
+        "name": "reset device data scope",
+        "func": "let lastdata = global.get(\"LORIDANE.data\");\nconst findNode = global.get(\"LORIDANE.funcs.findNode\");\nlet datakeys = Object.keys(lastdata);\nlet newdata = {};\n\nfor (let key of datakeys) {\n    if(findNode(key) > -1){\n        newdata[key] = lastdata[key];\n    }\n}\nglobal.set(\"LORIDANE.data\", newdata);\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1150,
+        "y": 260,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "d3b20f62a67c2b0b",
+        "type": "function",
+        "z": "20f0b4a8.24eafc",
+        "name": "test inject",
+        "func": "payload = {\"payload\":\"NOF008D1C8DC2022.1;43.8\",\"gw\":\"GWF008D1C8D658\",\"rssi\":-69,\"snr\":9.750000,\"sf\":7,\"freq\":867000000};\nbuf = Buffer.from(JSON.stringify(payload));\nmsg.payload = buf;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 290,
+        "y": 1400,
+        "wires": [
+            [
+                "f4bb67bd.d39b98"
+            ]
+        ]
+    },
+    {
+        "id": "130c5da2f67ec7ca",
+        "type": "inject",
+        "z": "20f0b4a8.24eafc",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 100,
+        "y": 1400,
+        "wires": [
+            [
+                "d3b20f62a67c2b0b"
+            ]
+        ]
+    },
+    {
+        "id": "803dcd521104fd55",
+        "type": "function",
+        "z": "20f0b4a8.24eafc",
+        "name": "analyse Buffer",
+        "func": "paystartindex = msg.payload.indexOf(\n    Buffer.from([0x6c,0x6f,0x61,0x64,0x22,0x3a,0x22])\n    ) + 7; // = load\":\"\npayendindex = msg.payload.indexOf(\n    Buffer.from([0x22,0x2c,0x22,0x67,0x77])\n    ); // = \",\"gw:\n    \nlet inString = msg.payload.toString();\nmsg.startindex = paystartindex;\nmsg.endindex = payendindex;\n\nif (msg.payload[paystartindex] == 0x4e && msg.payload[paystartindex+1] == 0x4f){ // payload starts with NO\n    msg.payload = inString;\n    return msg;\n}else{\n    let cipher = inString.slice(paystartindex, payendindex);\n    msg.cipher = Buffer.from(cipher);\n    msg.payload = inString.slice(0,paystartindex) + inString.slice(payendindex);\n    return msg;\n}\n\nreturn;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 500,
+        "y": 1400,
+        "wires": [
+            [
+                "ea584e6facdc9a6a"
+            ]
+        ]
+    },
+    {
+        "id": "8427f182b7810f64",
+        "type": "debug",
+        "z": "20f0b4a8.24eafc",
+        "name": "",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 510,
+        "y": 1340,
+        "wires": []
+    },
+    {
+        "id": "ea584e6facdc9a6a",
+        "type": "debug",
+        "z": "20f0b4a8.24eafc",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 690,
+        "y": 1400,
+        "wires": []
+    },
+    {
+        "id": "088ce0e8085dd6d5",
+        "type": "function",
+        "z": "4e984df.de567b4",
+        "name": "analyse Buffer",
+        "func": "paystartindex = msg.payload.indexOf(\n    Buffer.from([0x6c,0x6f,0x61,0x64,0x22,0x3a,0x22])\n    ) + 7; // = load\":\"\npayendindex = msg.payload.indexOf(\n    Buffer.from([0x22,0x2c,0x22,0x67,0x77])\n    ); // = \",\"gw:\n    \nlet inString = msg.payload.toString();\nmsg.startindex = paystartindex;\nmsg.endindex = payendindex;\n\nif (msg.payload[paystartindex] == 0x4e && msg.payload[paystartindex+1] == 0x4f){ // payload starts with NO\n    msg.payload = inString;\n    return msg;\n}else{\n    let cipher = inString.slice(paystartindex, payendindex);\n    msg.cipher = Buffer.from(cipher);\n    msg.payload = inString.slice(0,paystartindex) + inString.slice(payendindex);\n    return msg;\n}\n\nreturn;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 180,
+        "y": 80,
+        "wires": [
+            [
+                "6a479509.a7889c"
+            ]
+        ]
+    },
+    {
+        "id": "c0a3aa7bc8ce6775",
+        "type": "function",
+        "z": "b5aa0f5765475d21",
+        "d": true,
+        "name": "set OPC_UA Parameters",
+        "func": "return;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 710,
+        "y": 220,
+        "wires": [
+            [
+                "209a8f28dc1f12d2"
+            ]
+        ]
+    },
+    {
+        "id": "209a8f28dc1f12d2",
+        "type": "OpcUa-Client",
+        "z": "b5aa0f5765475d21",
+        "d": true,
+        "endpoint": "",
+        "action": "write",
+        "deadbandtype": "a",
+        "deadbandvalue": 1,
+        "time": 10,
+        "timeUnit": "s",
+        "certificate": "n",
+        "localfile": "",
+        "localkeyfile": "",
+        "securitymode": "None",
+        "securitypolicy": "None",
+        "name": "",
+        "x": 940,
+        "y": 220,
+        "wires": [
+            []
+        ]
     }
 ]

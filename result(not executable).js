@@ -64,7 +64,7 @@ function gui_show_confirmed(msg){
 
 
 //id:47d49580.9cf8dc
-function Sync(msg){
+function send_Sync(msg){
 	//*
 	timer = context.get("timer");
 	clearTimeout(timer);
@@ -144,19 +144,10 @@ function Validate_Data(msg){
 	let topic = true;
 	inrange = global.get("LORIDANE.funcs.inRangeOf");
 	const timeOnAir = global.get("LORIDANE.values.lastPayloadLens.toa");
-	
+	let minInterval = global.get("LORIDANE.values.lastPayloadLens.minInterval") || 5000;
+	const allowed = global.get("LORIDANE.funcs.allowed");
 	if(data.freq === 0){
 	    data.freq = global.get("LORIDANE.devices.gw[0].freq") / (1e6);
-	}
-	
-	function allowed(freq){
-	    allowedfreq = global.get("LORIDANE.values.allowedFreq");
-	    for (i = 0;i < allowedfreq.length;i++){
-	        if (inrange(data.freq,allowedfreq[i].min,allowedfreq[i].max)){
-	            return {allowed:true, factor:allowedfreq[i].factor};
-	        }
-	    }
-	    return {allowed:false,factor:Infinity};
 	}
 	
 	validated = false;
@@ -168,8 +159,9 @@ function Validate_Data(msg){
 	    if(data[key]){
 	        switch(key){
 	            case "freq":
-	                validated = allowed(data.freq).allowed;
-	                cause = "Forbidden Frequency "+data.freq+"MHz";
+	                fromAllowed = allowed(data.freq);
+	                validated = fromAllowed.allowed;
+	                cause = "Forbidden Frequency "+data.freq+"MHz, try "+fromAllowed.instead+" MHz instead";
 	                break;
 	            case "tx":
 	                validated = inrange(data.tx,4,20);
@@ -183,8 +175,7 @@ function Validate_Data(msg){
 	                validated = true;
 	                break;
 	            case "iv":
-	                minInterval = timeOnAir * allowed(data.freq).factor;
-	                node.warn(minInterval)
+	                minInterval = (isNaN(minInterval)) ? 4000 : minInterval;
 	                validated = inrange(data.iv,minInterval,Infinity);
 	                cause = `Send Interval is at least ${minInterval} ms !`;
 	                break;
@@ -288,8 +279,9 @@ function Validate_Data(msg){
 	    if(data[key]){
 	        switch(key){
 	            case "freq":
-	                validated = allowed(data.freq);
-	                cause = "Frequency";
+	                fromAllowed = allowed(data.freq);
+	                validated = fromAllowed.allowed;
+	                cause = "Forbidden Frequency "+data.freq+"MHz, try "+fromAllowed.instead+" MHz instead";
 	                break;
 	            case "tx":
 	                validated = inrange(data.tx,4,20);
@@ -382,18 +374,12 @@ function Join_Configurations(msg){
 function Validate_Data(msg){
 	data = msg.payload.data;
 	let topic = true;
+	let minInterval = global.get("LORIDANE.values.lastPayloadLens.minInterval") || 5000;
+	
 	inrange = global.get("LORIDANE.funcs.inRangeOf");
 	const timeOnAir = global.get("LORIDANE.values.lastPayloadLens.toa");
 	//node.warn(msg) //debug
-	function allowed(freq){
-	    allowedfreq = global.get("LORIDANE.values.allowedFreq");
-	    for (i = 0;i < allowedfreq.length;i++){
-	        if (inrange(data.freq,allowedfreq[i].min,allowedfreq[i].max)){
-	            return {allowed:true, factor:allowedfreq[i].factor};
-	        }
-	    }
-	    return false;
-	}
+	const allowed = global.get("LORIDANE.funcs.allowed");
 	
 	validated = false;
 	keys = Object.keys(data);
@@ -404,8 +390,9 @@ function Validate_Data(msg){
 	    if(data[key]){
 	        switch(key){
 	            case "freq":
-	                validated = allowed(data.freq).allowed;
-	                cause = "Forbidden Frequency "+data.freq+"MHz";
+	                fromAllowed = allowed(data.freq);
+	                validated = fromAllowed.allowed;
+	                cause = "Forbidden Frequency "+data.freq+"MHz, try "+fromAllowed.instead+" MHz instead";
 	                break;
 	            case "tx":
 	                validated = inrange(data.tx,4,20);
@@ -419,7 +406,7 @@ function Validate_Data(msg){
 	                validated = true;
 	                break;
 	            case "iv":
-	                minInterval = timeOnAir * allowed(data.freq).factor;
+	                minInterval = (isNaN(minInterval)) ? 4000 : minInterval;
 	                validated = inrange(data.iv,minInterval,Infinity);
 	                cause = `Send Interval which is at least ${minInterval} ms!`;
 	                break;
@@ -670,7 +657,7 @@ function show_current_settings(msg){
 
 
 //id:2581615a.b8042e
-function (msg){
+function send_with_delay(msg){
 	setTimeout(()=>node.send({topic:"",payload:""}),15000);
 	return msg;
 }
@@ -748,15 +735,19 @@ function delete_devices(msg){
 	if(msg.payload != "OK")return;
 	
 	//else
-	deleteDevice = global.get("LORIDANE.funcs.deleteDevice");
-	writeConfig = global.get("LORIDANE.funcs.writeConfig");
+	const deleteDevice = global.get("LORIDANE.funcs.deleteDevice");
+	const writeConfig = global.get("LORIDANE.funcs.writeConfig");
+	ignorelist = global.get("LORIDANE.ignorelist")||[];
 	
 	devices = msg.devices;
 	
 	for(var device of devices){
 	    deleteDevice(device);
+	    if(!ignorelist.includes(device)){
+	        ignorelist.push(device);
+	    }
 	}
-	
+	global.set("LORIDANE.ignorelist",ignorelist);
 	writeConfig();
 	
 	return;
@@ -801,23 +792,6 @@ function generate_and_show_mac(msg){
 }
 
 
-//id:8e968c3c.eb59d
-function delete_tokens(msg){
-	if(msg.payload == "Yes, sure"){
-	    global.set("LORIDANE.API.token",[]);
-	}
-	return;
-}
-
-
-//id:f624fc7e.eebc2
-function (msg){
-	msg.payload = "If yes, you will have to generate new ones and change them on every application";
-	msg.topic = "Delete all known Tokens?";
-	return msg;
-}
-
-
 //id:22ce213d.bd49be
 function Load_Devices(msg){
 	options = global.get("LORIDANE.ignorelist") || [];
@@ -834,10 +808,17 @@ function move_device_from_ignore_to_admit(msg){
 	const writeConfig = global.get("LORIDANE.funcs.writeConfig");
 	let admit = global.get("LORIDANE.admit")
 	let devices = msg.devices;
+	ignorelist = global.get("LORIDANE.ignorelist") ||[];
 	
 	for(var device of devices){
 	    admit.push(device);
+	    try{
+	        ignorelist.slice(ignorelist.indexOf(device),1);
+	    }catch(e){
+	        //pass
+	    }
 	}
+	global.get("LORIDANE.ignorelist",ignorelist);
 	global.set("LORIDANE.admit",admit);
 	
 	writeConfig();
@@ -863,7 +844,7 @@ function write_config(msg){
 
 
 //id:a0be56ff.ac9d48
-function (msg){
+function set_config_path_by_user(msg){
 	const USER = msg.user;
 	msg.payload = `/home/${USER}/LORIDANE/config/`;
 	return msg;
@@ -877,12 +858,19 @@ function Watch_Config_Folder(msg){
 	const homepath = msg.payload;
 	let LORIDANE = {};
 	let memCache = {};
+	let config;
 	LORIDANE.LinuxUsername = msg.user;
 	node.status({text:"Reading Config File and load to Memcache"})
 	
 	//Look for the config file
 	let path = homepath+"loridaneConfig.json";
-	let config = JSON.parse(fs.readFileSync(path)); //load config
+	
+	try{
+	    config = JSON.parse(fs.readFileSync(path)); //load config
+	}catch(e){
+	    node.warn("Error when loading config: "+e);
+	}
+	
 	delete config._comment;
 	LORIDANE.settings = config;
 	
@@ -897,7 +885,7 @@ function Watch_Config_Folder(msg){
 	    }
 	}
 	//check if memCache exists and concat objects
-	if(memCache) LORIDANE = {...LORIDANE,...memCache};
+	if(memCache) LORIDANE = {...memCache,...LORIDANE};
 	LORIDANE.blockONstart = false;
 	
 	// save to memcache    
@@ -952,7 +940,7 @@ function Functions(msg){
 	                return false;
 	            }
 	            
-	            if(!UID.startsWith("NO")&& !UID.startsWith("GW")){
+	            if(!UID.startsWith("NO") && !UID.startsWith("GW")){
 	                return false;
 	            }
 	            for (index=2;index<UID.length;index++){
@@ -1078,39 +1066,59 @@ function Functions(msg){
 	                const cr = global.get("crjs");
 	                const crypt = global.get("LORIDANE.settings.encryption");
 	                const key = cr.enc.Utf8.parse(crypt.key);
-	                //value = cr.enc.Hex.parse(asciiToHex(payload));
-	                let buf = Buffer.from(payload, 'ascii').toString();
-	                node.warn(buf)
+	                value = cr.enc.Hex.parse(funcs.buf2hex(payload));
+	                let buf = cr.enc.Base64.stringify(value);
 	                
 	                let bytes  = cr.AES.decrypt(buf, key, {
 	                    mode: cr.mode.ECB,
-	                    padding: cr.pad.NoPadding
+	                    padding: cr.pad.ZeroPadding,
+	                    salt:""
 	                });
-	                //node.warn(bytes)
-	                //let plaintext = cr.enc.Ascii.stringify(bytes);
-	                //let decoded = bytes.toString(cr.enc.Ascii);//hex2a(plaintext);
-	                let decrypted = bytes.toString(cr.enc.Ascii);
-	                //let words = cr.enc.Hex.parse(decrypted)
-	                //let decoded = words.toString(cr.enc.Hex)
-	                decoded = funcs.hex2a(decrypted)
 	                
-	                node.warn(decoded)
-	                
-	                return decoded;
+	                let decrypted = bytes.toString();
+	                //node.warn(decrypted)
+	                decrypted = funcs.hex2a(decrypted);
+	                return decrypted;
 	            },
 	            hex2a:
 	            function hex2a(hexx) {
-	                    var hex = hexx.toString();//force conversion
+	                    var hex = hexx.toString(); // if not already is str
 	                    var str = '';
 	                    for (var i = 0; i < hex.length; i += 2){
 	                        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
 	                    }
 	                    return str;
 	                    },
+	            buf2hex:
+	            function buf2hex(buffer) { // buffer is an ArrayBuffer
+	                    return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
+	            },
 	        timeOnAir:
 	            function timeOnAir(bytes,sf){
 	                let toa = Math.ceil((8 + ((bytes*8 - 4 * sf + 28) / (4 * sf) * 5)) * (2 ** sf) / (1e2));
 	                return toa;
+	            },
+	        allowed:
+	            function allowed(freq){
+	                const allowedfreq = global.get("LORIDANE.values.allowedFreq");
+	                const inrange = funcs.inRangeOf;
+	                for (i = 0, len = allowedfreq.length; i < len;i++){
+	                    if (inrange(freq,allowedfreq[i].min,allowedfreq[i].max)){
+	                        return {allowed:true, factor:allowedfreq[i].factor};
+	                    }
+	                    if (inrange(freq, allowedfreq[i].max, allowedfreq[i+1].min)){
+	                    return {allowed:false, instead: allowedfreq[i+1].min, factor:Infinity};
+	                    }
+	                }
+	                return {allowed:false, instead:867.0, factor: Infinity};
+	            },
+	        minInterval:
+	            function minInterval(){
+	                const toa = global.get("LORIDANE.values.lastPayloadLens.toa")||51;
+	                const allowed = funcs.allowed;                
+	                const freq = global.get("LORIDANE.devices.gw[0].freq")||867e6;
+	                let IV = toa * allowed(freq / 1e6).factor||4000;
+	                return IV;
 	            },
 	            math:{//**matematical functions*/
 	                getMean://**mean of an array*/
@@ -1172,10 +1180,12 @@ function Values(msg){
 	            {min:869.4,max:869.525,factor:1000},
 	            {min:869.7,max:869.875,factor:100}
 	        ],
-	        freq:{}
+	        freq:{
+	            min:863,
+	            max:869.875
+	        }
 	};
-	values.freq.min = 863;
-	values.freq.max = 869.875;
+	
 	
 	global.set("LORIDANE.values",values);
 	return msg;
@@ -1214,7 +1224,7 @@ function Wait_5s(msg){
 
 
 //id:94811c76.73936
-function LORIDANE_-_TIMEDISK(msg){
+function LORIDANE___TIMEDISK(msg){
 	const devices = global.get("LORIDANE.devices");
 	var devicecount = devices.gw.length + devices.nodes.length;
 	sf = devices.gw[0].sf;
@@ -1325,6 +1335,7 @@ function Process_incoming_Data(msg){
 	if(raw === "pong")return;
 	let lastmsgs = context.get("lastmsgs")||[];
 	const now  = Date.now();
+	const decrypt = global.get("LORIDANE.funcs.decrypt");
 	
 	//node.warn(raw)
 	function extractID(pay){
@@ -1347,6 +1358,8 @@ function Process_incoming_Data(msg){
 	    //node.warn(message.join(''))
 	    return message.join('');
 	}
+	
+	
 	let input;
 	//*/Variant 1 raw json
 	if(raw.startsWith("{")){
@@ -1355,17 +1368,21 @@ function Process_incoming_Data(msg){
 	        try{
 	            input = JSON.parse(raw);
 	        }catch(e){
-	            node.warn('There is something Wrong with the JSON (Line 37)')
+	            node.warn('There is something wrong with the JSON (Line 38)')
 	        }
 	    }else{
-	        message = extractDecipher(raw);
+	        testcipher: if (msg.cipher){
+	            let plain = decrypt(msg.cipher);
+	            input = raw.substr(0,msg.startindex)+plain+raw.substr(msg.startindex+1);
+	        }else{
+	            break testcipher;
+	        }
 	        //node.warn(message)
 	        try{
-	            input = JSON.parse(message);
+	            input = JSON.parse(input);
 	        }catch(e){
-	            node.warn(`There is something Wrong with the JSON (Line 44) ERR: ${e}`)
+	            node.warn(`There is something wrong with the JSON (Line 51) ERR: ${e}`)
 	        }
-	        
 	    }
 	    nodedata = input.payload;
 	    gateway = input.gw;
@@ -1373,7 +1390,7 @@ function Process_incoming_Data(msg){
 	    SNR = input.snr;
 	    SF = input.sf;
 	    freq = input.freq;
-	    (isNaN(extractID(nodedata).pay))? payload =  extractID(nodedata).pay : payload = parseFloat(extractID(nodedata).pay);
+	    payload = (isNaN(extractID(nodedata).pay))? extractID(nodedata).pay : parseFloat(extractID(nodedata).pay);
 	    node = extractID(nodedata).node;
 	}else{
 	    // Extract the data from the LoRa msg if ;-split string
@@ -1393,10 +1410,9 @@ function Process_incoming_Data(msg){
 	}
 	
 	ignorelist = global.get("LORIDANE.ignorelist")||[];
-	ignore = (ignorelist.indexOf(node) != -1 && ignorelist.indexOf(gateway) != -1);
-	
+	ignore = (ignorelist.indexOf(node) != -1 || ignorelist.indexOf(gateway) != -1);
 	if(ignore)return;
-	
+	msg.data = {};
 	// object that takes all data from the msg
 	msg.data = {
 	    pay: payload,
@@ -1408,7 +1424,7 @@ function Process_incoming_Data(msg){
 	    snr: SNR,
 	    lastSeen: now,
 	};
-	    
+	  
 	//object that will be passed through the core nodes
 	msg.config = {
 	    gw: gateway,
@@ -1419,16 +1435,21 @@ function Process_incoming_Data(msg){
 	};
 	msg.raw = raw; // the raw LoRa msg
 	msg.payload = payload; // the actual payload
-	let paylens = global.get("LORIDANE.values.lastPayloadLens")||{historic:[],mean:50,toa:83};
+	let paylens = global.get("LORIDANE.values.lastPayloadLens")||{historic:[],mean:50,toa:83,minInterval:4000};
 	const getMean = global.get("LORIDANE.funcs.math.getMean");
 	const timeOnAir = global.get("LORIDANE.funcs.timeOnAir");
+	const minInterval = global.get("LORIDANE.funcs.minInterval");
 	
-	paylens.historic.unshift(payload.length);
-	if(paylens.historic.length >= 20){
+	if(!isNaN(payloadLength = nodedata.toString().length) ){
+	    paylens.historic.unshift(payloadLength);
+	    if(paylens.historic.length > 60){
 	    paylens.historic.pop();
+	    }
 	}
+	
 	paylens.mean = getMean(paylens.historic);
 	paylens.toa = timeOnAir(paylens.mean,SF);
+	paylens.minInterval = minInterval();
 	global.set("LORIDANE.values.lastPayloadLens", paylens);
 	
 	return msg;
@@ -1452,7 +1473,7 @@ function msg_data_pay_to_msg_payload(msg){
 
 
 //id:ace12ad7.be1258
-function Confirmation_of_configuration_messages_via__+__payload(msg){
+function Confirmation_of_configuration_messages_via_____payload(msg){
 	if(msg.data.pay != "+")return;
 	
 	function getNextGW(uid){
@@ -1582,6 +1603,7 @@ function admit(msg){
 	if(indexgw == -1){
 	    admit.push(gw);
 	}
+	
 	if(indexnode == -1){
 	    if(payload == node){
 	        admit.push(node);
@@ -1614,7 +1636,7 @@ function change_tab_to_MSGS(msg){
 
 
 //id:c4a84594.067618
-function (msg){
+function set_msg_options_to_msg_admit(msg){
 	return {options:msg.admit};
 }
 
@@ -1921,7 +1943,7 @@ function add_new_node(msg){
 
 
 //id:4a21c374.73a2cc
-function (msg){
+function return_if_null(msg){
 	if(msg === null){
 	    return;
 	}
@@ -1930,7 +1952,7 @@ function (msg){
 
 
 //id:3a9e2be5.c14f04
-function (msg){
+function return_if_null_2(msg){
 	if(msg === null){
 	    return;
 	}
@@ -2070,7 +2092,7 @@ function write_config_file(msg){
 	const configpath = loridane.settings.path.config;
 	//delete loridane.timedisk;
 	delete loridane.homepath;
-	delete loridane.settings;
+	//delete loridane.settings;
 	//loridane.blockONstart = false;
 	const loridaneString = JSON.stringify(loridane,null,2);
 	fs.writeFileSync(configpath+"memCacheLoridane.json",loridaneString)
@@ -2079,17 +2101,17 @@ function write_config_file(msg){
 
 
 //id:943b015b.8fc56
-function (msg){
+function emulate_node(msg){
 	function randval(min,max){
 	    return min+Math.random()*(max-min);
 	}
 	
-	msg.payload = `{"payload":"NO1234567890AB${randval(1,20000)}",
-	    "gw":"GW1234567890AB",
-	    "rssi":${Math.round(randval(-120,0))},
-	    "snr":${randval(-10,12)},
-	    "sf":7,
-	    "freq":867000000}`;
+	msg.payload = `{"payload":"NO1234567890AB${Math.round(randval(1,2000000))/100}",\
+	"gw":"GW1234567890AB",\
+	"rssi":${Math.round(randval(-120,0))},\
+	"snr":${Math.round(randval(-10,12))},\
+	"sf":7,\
+	"freq":867000000}`;
 	return msg;
 }
 
@@ -2116,8 +2138,8 @@ function analyse_payload(msg){
 	// split payloads to  measure0, measure1,....and so on
 	let i = 0;
 	for(let val of pay){
-	    if(typeof(val) == "number"){
-	        val = parseFloat(val);
+	    if(num = parseFloat(val), typeof(num) == "number"){
+	        val = num;
 	    }
 	    payloadobject[`measure${i}`] = val;
 	    i++;
@@ -2141,6 +2163,7 @@ function Set_DataSet(msg){
 	msg.payload.uid = UID;
 	
 	if(msg.payload !== null)msg.filename = `/home/${USER}/LORIDANE/database/${UID}/${UID}_${date}.json`;
+	msg.dir = `/home/${USER}/LORIDANE/database/${UID}`;
 	global.set(`LORIDANE.data.${UID}.lastreading`,msg.payload);
 	return msg;
 }
@@ -2282,7 +2305,7 @@ function parse_json_and_write_file_to_object(msg){
 
 
 //id:04de0d0b8bcf8885
-function filter_msgs_<_30_seconds(msg){
+function filter_msgs___30_seconds(msg){
 	const now = Date.now()
 	const lasttime = context.get("lasttime") || now;
 	let interval = now - lasttime;
@@ -2399,7 +2422,7 @@ function Set_DataSet(msg){
 
 
 //id:489395b840d57d55
-function (msg){
+function parse_serial_input_stream(msg){
 	trigger = msg.payload;
 	//trigger.replace(/\r\n|\r|\n/g,"")
 	msg = {payload: trigger};
@@ -2411,10 +2434,37 @@ function (msg){
 	    "Please Enter the Username Of Your MQTT Broker",
 	    "Please Enter the Password for Your MQTT Broker",
 	    ]
-	
-	for(var pat of cases){
-	    if (trigger.includes(pat)){
-	        return msg;
+	    
+	let autoOutput;
+	for(let pat in cases){
+	    if (trigger.includes(cases[pat])){
+	        let gatewayConfig = global.get("LORIDANE.settings.gatewayConfig") || {};
+	        if (gatewayConfig != {} && gatewayConfig.automatic){
+	            let autoOutput = '';
+	            node.warn('Gateway Auto Configuration')
+	            switch(pat){
+	                case "0":
+	                    autoOutput = gatewayConfig.ssid+'\n';
+	                    break;
+	                case "1":
+	                    autoOutput = gatewayConfig.wpwd+'\n';
+	                    break;
+	                case "2":
+	                    autoOutput = gatewayConfig.broker+'\n';
+	                    break;
+	                case "3":
+	                    autoOutput = gatewayConfig.user+'\n';
+	                    break;
+	                case "4":
+	                    autoOutput = gatewayConfig.mpwd+'\n';
+	                    break;
+	                default:
+	                    node.warn('no case met')
+	                    return;
+	            }
+	            return [null,{payload:autoOutput}];
+	        }
+	        return [msg,null];
 	    }else{
 	        continue;  
 	    }
@@ -2515,7 +2565,7 @@ function mean_power_by_time(msg){
 	let timespan = [];
 	msg.out = {};
 	
-	//set propwerty Key here
+	//set property Key here
 	const powerKey = 'measure1';
 	
 	for (i = 0; i<data.length;i++){
@@ -2592,7 +2642,7 @@ function define_filepath(msg){
 
 
 //id:67e7dc8e5e0d33a7
-function (msg){
+function delete_unrequired_property(msg){
 	data = msg.data
 	starttime = data[0].timestamp
 	let count = 1
@@ -2611,7 +2661,7 @@ function (msg){
 
 
 //id:7b804f9ff2308e9f
-function (msg){
+function process_labels(msg){
 	data = msg.data
 	iro = global.get("LORIDANE.funcs.inRangeOf");
 	
@@ -2632,7 +2682,7 @@ function (msg){
 
 
 //id:1c032af464f2e330
-function (msg){
+function calculate_duration(msg){
 	data = msg.data
 	len = data.length
 	data[0].dur = 0;
@@ -2644,7 +2694,7 @@ function (msg){
 
 
 //id:8babc9f33f594710
-function (msg){
+function objects_to_json_file(msg){
 	for (var date of msg.data){
 	    node.send({payload:date})
 	}
@@ -2653,7 +2703,7 @@ function (msg){
 
 
 //id:57fd659f2ac85919
-function (msg){
+function convergence_matrix_to_csv(msg){
 	data = msg.data;
 	len = data.length
 	firstline = "";
@@ -2696,7 +2746,7 @@ function (msg){
 
 
 //id:f91cb91215f9d412
-function (msg){
+function compare_pid(msg){
 	data = msg.data
 	len = data.length;
 	data[0].pstart = true;
@@ -2763,7 +2813,7 @@ function Set_DataSet(msg){
 
 
 //id:58b96b7be58245f6
-function (msg){
+function return_if_payload_undefined(msg){
 	if(!msg.payload){
 	    return msg;
 	}
@@ -2772,130 +2822,25 @@ function (msg){
 
 
 //id:40c4880ff2097a1c
-function Write_to_File(msg){
+function write_dataset_to_File(msg){
 	const fs = global.get("fs");
-	
-	fs.appendFile(msg.filename, JSON.stringify(msg.payload)+'\n', err => {
-	  if (err) {
-	    console.error(err);
-	    return
-	  }
+	const dir = msg.dir;
+	try{
+	    fs.appendFile(msg.filename, JSON.stringify(msg.payload)+'\n', err => {
+	    if (err) node.warn(err);
+	    if (!fs.existsSync(dir)){
+	        fs.mkdirSync(dir);
+	        fs.appendFileSync(msg.filename,JSON.stringify(msg.payload)+'\n');
+	    }
+	    });
+	    
+	}catch(err) {
+	    node.warn(err)
+	    fs.writeFileSync(msg.filename, JSON.stringify(msg.payload)+'\n');
+	}
 	  //file written successfully
-	})
 	node.status({text:msg.filename});
 	return msg;
-}
-
-
-//id:ef31e46db222ac56
-function Load_Files(msg){
-	const fs = global.get("fs");
-	const homepath = global.get("LORIDANE.settings.path.database");
-	let files = [];
-	let pathes = [];
-	
-	function traverseDir(dir) {
-	    if(dir[dir.length-1]!= "/") dir = dir+"/";
-	        fs.readdirSync(dir).forEach(file => {
-	        let fullPath = dir+file;
-	        
-	        if (fs.lstatSync(fullPath).isDirectory()) {
-	            traverseDir(fullPath);
-	        } else {
-	            files.push(file.replace(".json",""));
-	            pathes.push(fullPath)
-	        }  
-	   });
-	   return pathes;
-	}
-	
-	traverseDir(homepath);
-	msg.files = files;
-	msg.pathes = pathes;
-	return msg;
-}
-
-
-//id:8e09539089fed853
-function export_to_CSV(msg){
-	const fs = global.get("fs");
-	const homepath = global.get("LORIDANE.settings.path.database");
-	const files = msg.files;
-	const pathes = msg.pathes;
-	let content = {};
-	const delimiter = global.get("LORIDANE.settings.csvDelimiter")
-	// foos-------------------------------------------------
-	function parseJSON(str) {
-	   try {
-	      return JSON.parse(str);
-	   }
-	   catch (e) {
-	      //node.warn(e);
-	      return;
-	   }
-	}
-	
-	function getFirstLine(obj){
-	    let props = Object.keys(obj);
-	    return props.join(';')+'\n';
-	}
-	
-	function readFile2Arr(path){
-	    let output = [];
-	    let lines;
-	    const fs = global.get("fs");
-	    try {
-	        lines = fs.readFileSync(path).toString().split("\n");
-	    }
-	    catch (e){
-	        node.warn(e);
-	        return;
-	    }
-	    
-	    for(let line of lines){
-	        output.push(parseJSON(line));
-	    }
-	    return output;
-	}
-	
-	function makeCSV(line){
-	    let output = '';
-	    let arr;
-	    try{
-	        arr = Object.values(line);
-	    }
-	    catch(e){
-	        return;
-	    }
-	    
-	    output = arr.join(delimiter);
-	    return output + '\n';
-	}
-	
-	function * readFiles(pathes, files){
-	    let len = files.length;
-	    for (let path in pathes){
-	        let fileContent = readFile2Arr(pathes[path]);
-	        
-	        let firstLine = getFirstLine(fileContent[0]);
-	        let file = firstLine;
-	        for (let line of fileContent){
-	            file += makeCSV(line);
-	        }
-	        yield {name:files[path]+'.csv',content:file,stateQuo:`Processing File ${parseInt(path)+1} of ${len}.`};
-	    }
-	}
-	//foos end----------------------------------------------------
-	let read = readFiles(pathes,files);
-	content = read.next();
-	while (!content.done) {
-	        node.send({topic:content.value.stateQuo,toast:true});
-	        fs.writeFileSync(homepath+content.value.name,content.value.content);
-	        content = read.next();
-	}
-	node.send({topic: `All Files exported to CSV. They are in ${homepath}`,toast:false});
-	
-	return;
 }
 
 
@@ -2925,13 +2870,263 @@ function Process_incoming_Data(msg){
 }
 
 
-//id:027a95c7d450c756
-function (msg){
+//id:06788427bde848a3
+function Load_Files(msg){
+	const fs = global.get("fs");
+	const homepath = global.get("LORIDANE.settings.path.database");
+	let files = [];
+	let pathes = [];
 	
+	function traverseDir(dir) {
+	    if(dir[dir.length-1]!= "/") dir = dir+"/";
+	        fs.readdirSync(dir).forEach(file => {
+	        let fullPath = dir+file;
+	        
+	        if (fs.lstatSync(fullPath).isDirectory()) {
+	            traverseDir(fullPath);
+	        } else {
+	            files.push(file.replace(".json",""));
+	            pathes.push(fullPath)
+	        }  
+	   });
+	   return pathes;
+	}
+	
+	traverseDir(homepath);
+	msg.files = files;
+	msg.pathes = pathes;
+	return msg;
+}
+
+
+//id:40ea27940353c873
+function export_to_CSV(msg){
+		const fs = global.get("fs");
+		const homepath = global.get("LORIDANE.settings.path.database");
+		const files = msg.files;
+		const pathes = msg.pathes;
+		let content = {};
+		const delimiter = global.get("LORIDANE.settings.csvDelimiter")
+		// foos-------------------------------------------------
+		function parseJSON(str) {
+		   try {
+		      return JSON.parse(str);
+		   }
+		   catch (e) {
+		      //node.warn(e);
+		      return;
+		   }
+		}
+		
+		function getFirstLine(obj){
+		    let props = Object.keys(obj);
+		    return props.join(';')+'\n';
+		}
+		
+		function readFile2Arr(path){
+		    let output = [];
+		    let lines;
+		    const fs = global.get("fs");
+		    try {
+		        lines = fs.readFileSync(path).toString().split("\n");
+		    }
+		    catch (e){
+		        node.warn(e);
+		        return;
+		    }
+		    
+		    for(let line of lines){
+		        output.push(parseJSON(line));
+		    }
+		    return output;
+		}
+		
+		function makeCSV(line){
+		    let output = '';
+		    let arr;
+		    try{
+		        arr = Object.values(line);
+		    }
+		    catch(e){
+		        return;
+		    }
+		    
+		    output = arr.join(delimiter);
+		    return output + '\n';
+		}
+		
+		function * readFiles(pathes, files){
+		    let len = files.length;
+		    for (let path in pathes){
+		        let fileContent = readFile2Arr(pathes[path]);
+		        
+		        let firstLine = getFirstLine(fileContent[0]);
+		        let file = firstLine;
+		        for (let line of fileContent){
+		            file += makeCSV(line);
+		        }
+		        yield {name:files[path]+'.csv',content:file,stateQuo:`Processing File ${parseInt(path)+1} of ${len}.`};
+		    }
+		}
+		//foos end----------------------------------------------------
+		let read = readFiles(pathes,files);
+		
+		content = read.next();
+		while (!content.done) {
+		        node.send({topic:content.value.stateQuo,toast:true});
+		        fs.writeFileSync(homepath+content.value.name,content.value.content);
+		        content = read.next();
+		}
+		node.send({topic: `All Files exported to CSV. They are in ${homepath}`,toast:false});
+		
+		return;
+}
+
+
+//id:56b04d39a183b93b
+function analyse_buffer_test(msg){
+	buffer = msg.payload;
+	
+	startindex = 12;
+	endindex = 12+32;//buffer.indexOf(0x22,12);
+	
+	firstpart = buffer.slice(0,startindex)
+	payload = buffer.slice(startindex,endindex);
+	endpart = buffer.slice(endindex);
+	msg.payload = {encrypted: payload,start:firstpart, end:endpart, text:firstpart.toString()+endpart.toString()}
+	return msg;
+}
+
+
+//id:310a7533ec09e440
+function decryption_test(msg){
 	decrypt = global.get("LORIDANE.funcs.decrypt");
-	plaintext = decrypt(ciphertext.toString());
 	
-	return {payload:plaintext};
+	//node.warn(msg.payload.encrypted);
+	msg.decrypt = decrypt(msg.payload.encrypted);
+	
+	return msg;
+}
+
+
+//id:5731a85d08ea3dd5
+function clear_Ignore_an_admission_list(msg){
+	list = [];
+	global.set("LORIDANE.ignorelist",list);
+	global.set("LORIDANE.admit",list);
+	return;
+}
+
+
+//id:b62026e6367c3ae2
+function set_sync_interval(msg){
+	const interval = global.get("LORIDANE.settings.syncInterval")||233;
+	
+	function trigger(){
+	    node.send({payload:true});
+	}
+	
+	let intVal = context.get("intVal");
+	clearInterval(intVal);
+	
+	intVal = setInterval(trigger,interval * 1000);
+	context.set("intVal",intVal);
+	return;
+}
+
+
+//id:0081140cd5374547
+function filter_null_msg(msg){
+	if (msg === null){
+	    return;
+	}
+	return msg;
+}
+
+
+//id:c293f39ddc15f47b
+function reset_device_data_scope(msg){
+	let lastdata = global.get("LORIDANE.data");
+	const findNode = global.get("LORIDANE.funcs.findNode");
+	let datakeys = Object.keys(lastdata);
+	let newdata = {};
+	
+	for (let key of datakeys) {
+	    if(findNode(key) > -1){
+	        newdata[key] = lastdata[key];
+	    }
+	}
+	global.set("LORIDANE.data", newdata);
+	return msg;
+}
+
+
+//id:d3b20f62a67c2b0b
+function test_inject(msg){
+	payload = {"payload":"NOF008D1C8DC2022.1;43.8","gw":"GWF008D1C8D658","rssi":-69,"snr":9.750000,"sf":7,"freq":867000000};
+	buf = Buffer.from(JSON.stringify(payload));
+	msg.payload = buf;
+	return msg;
+}
+
+
+//id:803dcd521104fd55
+function analyse_Buffer(msg){
+	paystartindex = msg.payload.indexOf(
+	    Buffer.from([0x6c,0x6f,0x61,0x64,0x22,0x3a,0x22])
+	    ) + 7; // = load":"
+	payendindex = msg.payload.indexOf(
+	    Buffer.from([0x22,0x2c,0x22,0x67,0x77])
+	    ); // = ","gw:
+	    
+	let inString = msg.payload.toString();
+	msg.startindex = paystartindex;
+	msg.endindex = payendindex;
+	
+	if (msg.payload[paystartindex] == 0x4e && msg.payload[paystartindex+1] == 0x4f){ // payload starts with NO
+	    msg.payload = inString;
+	    return msg;
+	}else{
+	    let cipher = inString.slice(paystartindex, payendindex);
+	    msg.cipher = Buffer.from(cipher);
+	    msg.payload = inString.slice(0,paystartindex) + inString.slice(payendindex);
+	    return msg;
+	}
+	
+	return;
+}
+
+
+//id:088ce0e8085dd6d5
+function analyse_Buffer(msg){
+	paystartindex = msg.payload.indexOf(
+	    Buffer.from([0x6c,0x6f,0x61,0x64,0x22,0x3a,0x22])
+	    ) + 7; // = load":"
+	payendindex = msg.payload.indexOf(
+	    Buffer.from([0x22,0x2c,0x22,0x67,0x77])
+	    ); // = ","gw:
+	    
+	let inString = msg.payload.toString();
+	msg.startindex = paystartindex;
+	msg.endindex = payendindex;
+	
+	if (msg.payload[paystartindex] == 0x4e && msg.payload[paystartindex+1] == 0x4f){ // payload starts with NO
+	    msg.payload = inString;
+	    return msg;
+	}else{
+	    let cipher = inString.slice(paystartindex, payendindex);
+	    msg.cipher = Buffer.from(cipher);
+	    msg.payload = inString.slice(0,paystartindex) + inString.slice(payendindex);
+	    return msg;
+	}
+	
+	return;
+}
+
+
+//id:c0a3aa7bc8ce6775
+function set_OPC_UA_Parameters(msg){
+	return;
 }
 
 
