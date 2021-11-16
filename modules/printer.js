@@ -10,7 +10,7 @@ module.exports = {
     printFunction:
     function (nodeobj,functionnodes){
         const nameregex = RegExp(/[ \s\'\.\"\-+<>*\/]/g);
-        let name = nodeobj.name.replace(nameregex, '_')//.replace(/\'/g, '_').replace(/\./g,'_');
+        let name = nodeobj.name.replace(nameregex, '_').toLowerCase();//.replace(/\'/g, '_').replace(/\./g,'_');
         let id = nodeobj.id;
         let printcalled = ';'
         /*
